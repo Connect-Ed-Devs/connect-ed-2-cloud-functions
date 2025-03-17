@@ -1,89 +1,128 @@
 import axios from "axios";
-import cheerio from "cheerio";
+import * as cheerio from "cheerio";
 import qs from "qs";
+import {Schools} from "./models/schools.js";
+import {Sports} from "./models/sports.js";
 
-// Stub functions replacing your original database lookups
+/**
+ * Helper functions to replace SQL lookups.
+ */
 async function getSportID(leagueNum) {
-  return leagueNum; // Replace with real logic if needed.
+    // Look up the sport record by league code
+    const sportRecord = Sports.getSportByLeagueCode(leagueNum);
+    // For this example, we’ll use the league code as the unique id.
+    return sportRecord ? sportRecord[2] : null;
 }
 
 async function getSchoolIDAbbrev(schoolAbbrev) {
-  return schoolAbbrev; // Replace with real lookup if needed.
+    const school = Schools.getSchoolByAbbreviation(schoolAbbrev);
+    return school ? school.id : null;
+}
+
+export async function getSchoolIDName(schoolName) {
+    const school = Schools.getSchoolByName(schoolName);
+    return school ? school.id : null;
 }
 
 function getMonthIndex(monthName) {
-  return new Date(Date.parse(monthName + " 1, 2000")).getMonth() + 1;
+    return new Date(Date.parse(monthName + " 1, 2000")).getMonth() + 1;
 }
 
-export async function parseGames(leagueNum) {
-  const response = await axios.request({
-    baseURL:
-      "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
-    method: "PUT",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    data: qs.stringify({ txtleague: `${leagueNum}` }),
-  });
+/**
+ * inSport: Checks if the sport (using the league code) includes "Appleby College" in its standings.
+ */
+async function inSport(leagueNum, name) {
+    try {
+        const response = await axios.request({
+            baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
+            method: "PUT",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            data: qs.stringify({ txtleague: `${leagueNum}` }),
+        });
+        const html = response.data;
+        const $ = cheerio.load(html);
+        let insport = false;
 
-  const html = response.data;
-  const $ = cheerio.load(html);
-  const sport_id = await getSportID(leagueNum);
+        $("#standings").each((index, element) => {
+            $(element)
+                .find("div>table>tbody>tr")
+                .each((index, element) => {
+                    // Skip the header row
+                    if ($(element).text() !== "TeamsGamesWinLossTiePoints") {
+                        let text = $(element).text();
+                        let teamName = "";
+                        let counter = 0;
+                        while (counter < text.length && text.charAt(counter) !== "-") {
+                            teamName += text.charAt(counter);
+                            counter++;
+                        }
+                        // Remove trailing characters (e.g., spaces or punctuation)
+                        teamName = teamName.substring(0, teamName.length - 2);
+                        if (teamName === "Appleby College") {
+                            insport = true;
+                        }
+                    }
+                });
+        });
+        return insport;
+    } catch (err) {
+        return false;
+    }
+}
 
-  const gamePromises = $("#scheduleTable tr")
-    .map(async (index, element) => {
-      const $tdElements = $(element).find("td");
-      let date = $tdElements.eq(0).text().trim().substring(4, 10);
-      const [targetMonth, targetDay] = date.split(" ");
-      const targetMonthIndex = getMonthIndex(targetMonth);
-      const today = new Date();
-      const month = today.getMonth() + 1;
-      let year = today.getFullYear();
-      if (month >= 9) {
-        year++;
-      }
-      if (targetMonthIndex >= 9) {
-        year--;
-      }
-      const stringTargetMonthIndex =
-        targetMonthIndex > 9
-          ? targetMonthIndex.toString()
-          : `0${targetMonthIndex}`;
-      date = `${year}-${stringTargetMonthIndex}-${targetDay}`;
+/**
+ * parseSports: Scrapes data on each sports league from the website.
+ * Returns an array where each element is [sport name, term, league code].
+ */
+export async function parseSports() {
+    let sports = [];
+    try {
+        const response = await axios.request({
+            baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
+            method: "PUT",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            data: { txtleague: "2860Y8N5D" },
+        });
+        const html = response.data;
+        const $ = cheerio.load(html);
 
-      let time = $tdElements.eq(1).text().trim();
-      time =
-        time.substring(6, 7) === "a"
-          ? time.substring(0, 6) + "AM"
-          : time.substring(0, 6) + "PM";
-      time =
-        time.charAt(0) === "0"
-          ? time.substring(1, 8)
-          : time.substring(0, 8);
-
-      let home = $tdElements.eq(2).text().trim();
-      home = home.substring(0, home.length - 1);
-      const homeScore = $tdElements.eq(3).text().trim();
-      let away = $tdElements.eq(4).text().trim();
-      away = away.substring(0, away.length - 1);
-      const awayScore = $tdElements.eq(5).text().trim();
-
-      if (home === "AC" || away === "AC") {
-        const home_id = await getSchoolIDAbbrev(home);
-        const away_id = await getSchoolIDAbbrev(away);
-        const game_code = `G_${sport_id}_${home_id}_${away_id}_${date}`;
-        return {
-          home_id,
-          away_id,
-          sport_id,
-          home_score: homeScore,
-          away_score: awayScore,
-          date,
-          time,
-          game_code,
-        };
-      }
-    })
-    .get();
-
-  const games = await Promise.all(gamePromises);
-  return games.filter((game) => game !== undefined);
+        const fallPromises = $("#lstFall option").map(async (index, element) => {
+            try {
+                if (
+                    (await inSport($(element).val(), $(element).text())) &&
+                    $(element).text() !== "FALL"
+                ) {
+                    return [$(element).text(), "Fall", $(element).val()];
+                }
+            } catch (err) {}
+        });
+        const winterPromises = $("#lstWinter option").map(async (index, element) => {
+            try {
+                if (
+                    (await inSport($(element).val(), $(element).text())) &&
+                    $(element).text() !== "WINTER"
+                ) {
+                    return [$(element).text(), "Winter", $(element).val()];
+                }
+            } catch (err) {}
+        });
+        const springPromises = $("#lstSpring option").map(async (index, element) => {
+            try {
+                if (
+                    (await inSport($(element).val(), $(element).text())) &&
+                    $(element).text() !== "SPRING"
+                ) {
+                    return [$(element).text(), "Spring", $(element).val()];
+                }
+            } catch (err) {}
+        });
+        const fallSports = await Promise.all(fallPromises);
+        const winterSports = await Promise.all(winterPromises);
+        const springSports = await Promise.all(springPromises);
+        sports = [...fallSports, ...winterSports, ...springSports].filter(Boolean);
+        return sports;
+    } catch (err) {
+        console.error("Error in parseSports:", err);
+        return sports;
+    }
 }
