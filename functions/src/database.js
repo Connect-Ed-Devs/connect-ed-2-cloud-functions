@@ -1,5 +1,5 @@
-import { initializeApp, applicationDefault, cert } from 'firebase-admin/app';
-import { getFirestore, Timestamp, FieldValue, Filter } from 'firebase-admin/firestore';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import { parseSports, parseStandings, parseGames } from "./games.js";
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -65,7 +65,11 @@ export async function setStandings(leagueCode) {
     const standings = await parseStandings(leagueCode);
     const batch = db.batch();
     standings.forEach((standing) => {
-        const docRef = db.collection("Standings").doc(standing.standings_code);
+        // Create reference to the standings subcollection within the sport document
+        const docRef = db.collection("Sports")
+            .doc(leagueCode)
+            .collection("Standings")
+            .doc(standing.standings_code);
         batch.set(docRef, standing, { merge: true });
     });
     await batch.commit();
@@ -98,17 +102,29 @@ export async function getSports() {
 }
 
 export async function getStandings(leagueNum) {
-    const snapshot = await db.collection("Standings").where("sport_id", "==", leagueNum).get();
+    const snapshot = await db.collection("Sports").doc(leagueNum).collection("Standings").get();
     const standings = [];
     snapshot.forEach(doc => standings.push(doc.data()));
     return standings;
 }
 
 export async function getAllStandings() {
-    const snapshot = await db.collection("Standings").get();
-    const standings = [];
-    snapshot.forEach(doc => standings.push(doc.data()));
-    return standings;
+    const sportsSnapshot = await db.collection("Sports").get();
+    const allStandingsPromises = [];
+
+    sportsSnapshot.forEach(sportDoc => {
+        const standingsPromise = sportDoc.ref.collection("Standings").get()
+            .then(standingsSnapshot => {
+                const standings = [];
+                standingsSnapshot.forEach(doc => standings.push(doc.data()));
+                return standings;
+            });
+        allStandingsPromises.push(standingsPromise);
+    });
+
+    const allStandingsArrays = await Promise.all(allStandingsPromises);
+    // Flatten the array of arrays
+    return allStandingsArrays.flat();
 }
 
 export async function getGames(leagueNum) {
