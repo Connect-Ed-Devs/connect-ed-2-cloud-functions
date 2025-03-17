@@ -14,7 +14,8 @@ export class Game {
     sportsId = 0,
     sportsName = '',
     term = '',
-    leagueCode = ''
+    leagueCode = '',
+    gameCode = ''
   }) {
     this.homeTeam = homeTeam;
     this.homeAbbr = homeAbbr;
@@ -30,6 +31,7 @@ export class Game {
     this.sportsName = sportsName;
     this.term = term;
     this.leagueCode = leagueCode;
+    this.gameCode = gameCode;
   }
 
   toMap() {
@@ -47,7 +49,8 @@ export class Game {
       sports_id: this.sportsId,
       sports_name: this.sportsName,
       term: this.term,
-      league_code: this.leagueCode
+      league_code: this.leagueCode,
+      game_code: this.gameCode
     };
   }
 }

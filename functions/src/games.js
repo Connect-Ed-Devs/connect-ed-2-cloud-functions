@@ -228,6 +228,12 @@ export async function parseStandings(leagueNum){
  * Returns an array of Game objects.
  */
 export async function parseGames(leagueNum) {
+    // Get sport from leagueNum
+    const sport = Sports.getSportByLeagueCode(leagueNum);
+    if (!sport) {
+        console.error(`Sport not found for league number: ${leagueNum}`);
+        return [];
+    }
     try {
         const response = await axios.request({
             baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
@@ -255,27 +261,47 @@ export async function parseGames(leagueNum) {
                 let time = $tdElements.eq(1).text().trim();
                 time = time.substring(6, 7) === "a" ? time.substring(0, 6) + "AM" : time.substring(0, 6) + "PM";
                 time = time.charAt(0) === "0" ? time.substring(1, 8) : time.substring(0, 8);
-                let home = $tdElements.eq(2).text().trim();
-                home = home.substring(0, home.length - 1);
+                let homeAbbr = $tdElements.eq(2).text().trim();
+                homeAbbr = homeAbbr.substring(0, homeAbbr.length - 1);
                 const homeScore = $tdElements.eq(3).text().trim();
-                let away = $tdElements.eq(4).text().trim();
-                away = away.substring(0, away.length - 1);
+                let awayAbbr = $tdElements.eq(4).text().trim();
+                awayAbbr = awayAbbr.substring(0, awayAbbr.length - 1);
                 const awayScore = $tdElements.eq(5).text().trim();
-                if (home === "AC" || away === "AC") {
-                    let home_id = await getSchoolIDAbbrev(home);
-                    let away_id = await getSchoolIDAbbrev(away);
+                if (homeAbbr === "AC" || awayAbbr === "AC") {
+                    let home_id = await getSchoolIDAbbrev(homeAbbr);
+                    let away_id = await getSchoolIDAbbrev(awayAbbr);
+
+                    // Get full team names from Schools model using abbreviations
+                    const homeSchool = Schools.getSchoolByAbbreviation(homeAbbr);
+                    const awaySchool = Schools.getSchoolByAbbreviation(awayAbbr);
+
+
+                    // Check if homeSchool and awaySchool are not null
+                    if (!homeSchool || !awaySchool) {
+                        console.error(`School not found for abbreviation: ${homeAbbr} or ${awayAbbr}`);
+                        return undefined;
+                    }
+
+                    const homeTeam = homeSchool.school_name;
+                    const awayTeam = awaySchool.school_name;
+
                     // Create a Game instance.
                     const game = new Game({
-                        homeTeam: home,  // In a real scenario, you might retrieve the full team name
-                        homeAbbr: home,
-                        awayTeam: away,
-                        awayAbbr: away,
+                        homeTeam: homeTeam,
+                        homeAbbr: homeAbbr,
+                        homeLogo: homeSchool.logo_dir,
+                        awayTeam: awayTeam,
+                        awayAbbr: awayAbbr,
+                        awayLogo: awaySchool.logo_dir,
                         homeScore: homeScore,
                         awayScore: awayScore,
                         gameDate: new Date(date),
                         gameTime: time,
                         sportsId: sport_id,
-                        leagueCode: leagueNum
+                        sportsName: sport[0],
+                        term: sport[1],
+                        leagueCode: leagueNum,
+                        gameCode: `G_${home_id}_${away_id}_${date.replace(/-/g, '_')}_${sport_id}`,
                     });
                     return game.toMap();
                 }
