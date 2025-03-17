@@ -1,4 +1,4 @@
-// javascript
+// This file contains the Game class which encapsulates game data as an object.
 export class Game {
   constructor({
     homeTeam = '',
