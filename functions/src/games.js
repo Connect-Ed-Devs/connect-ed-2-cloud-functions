@@ -278,7 +278,7 @@ export async function parseGames(leagueNum) {
 
                     // Check if homeSchool and awaySchool are not null
                     if (!homeSchool || !awaySchool) {
-                        console.error(`School not found for abbreviation: ${homeAbbr} or ${awayAbbr}`);
+                        console.error(`School not found for abbreviation: ${homeAbbr} or ${awayAbbr} in ${leagueNum}`);
                         return undefined;
                     }
 
