@@ -89,6 +89,20 @@ export async function setGames(leagueCode) {
     await batch.commit();
 }
 
+/**
+ * setAll:
+ * Sets all sports, standings, and games data.
+ */
+export async function setAll() {
+    await setSports();
+    const sports = await getSports();
+    const promises = sports.map(async (sport) => {
+        await setStandings(sport.league_code);
+        await setGames(sport.league_code);
+    });
+    await Promise.all(promises);
+}
+
 
 /**
  * Getter Methods:

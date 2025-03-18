@@ -28,7 +28,7 @@ export class Schools {
         { id: 89, school_name: "Branksome Hall", abbreviation: "BH", logo_dir: "assets/BH Logo.png" },
         { id: 90, school_name: "St. Mildred's Lightbourn School", abbreviation: "SMLS", logo_dir: "assets/SMLS Logo.png" },
         { id: 91, school_name: "Albert College", abbreviation: "ALB", logo_dir: "assets/ALB Logo.png" },
-        { id: 92, school_name: "Bayview Glen", abbreviation: "BG", logo_dir: "assets/BG Logo.png" },
+        { id: 92, school_name: "Bayview Glen", abbreviation: "BVG", logo_dir: "assets/BG Logo.png" },
         { id: 93, school_name: "Greenwod School", abbreviation: "GS", logo_dir: "assets/GS Logo.png" },
         { id: 94, school_name: "Rosedale Day School", abbreviation: "RDS", logo_dir: "assets/RDS Logo.png" },
         { id: 95, school_name: "Toronto Montessori School", abbreviation: "TMS", logo_dir: "assets/TMS Logo.png" },
@@ -40,7 +40,19 @@ export class Schools {
         { id: 102, school_name: "Sterling Hall School (b)", abbreviation: "SHS (b)", logo_dir: "assets/SHS Logo.png" },
         { id: 103, school_name: "Greenwood College School", abbreviation: "GCS", logo_dir: "assets/GCS Logo.png" },
         { id: 104, school_name: "The York School", abbreviation: "TYS", logo_dir: "assets/GCS Logo.png" },
-        { id: 105, school_name: "Branksome RSGC", abbreviation: "BHRSG", logo_dir: "assets/BH Logo.png" }
+        { id: 105, school_name: "Branksome RSGC", abbreviation: "BHRSG", logo_dir: "assets/BH Logo.png" },
+        { id: 106, school_name: "Havergal Crescent", abbreviation: "HACS", logo_dir: "assets/HC Logo.png" },
+        { id: 107, school_name: "Bishop Strachan St.Mike's", abbreviation: "BSSMC", logo_dir: "assets/BSS Logo.png" },
+        { id: 108, school_name: "St. Clement's UCC", abbreviation: "SCSUCC", logo_dir: "assets/UCC Logo.png" },
+        { id: 109, school_name: "St. Clement's School", abbreviation: "SCS", logo_dir: "assets/SCS Logo.png" },
+        { id: 110, school_name: "Lauremont School", abbreviation: "LS", logo_dir: "assets/LS Logo.png" },
+        { id: 111, school_name: "Kingsway College School", abbreviation: "KCS", logo_dir: "assets/KCS Logo.png" },
+        { id: 112, school_name: "St. Andrew's College (White)", abbreviation: "SAC�(White", logo_dir: "assets/SAC Logo.png" },
+        { id: 114, school_name: "St. Andrew's College (Red)", abbreviation: "SAC�(Red", logo_dir: "assets/SAC Logo.png" },
+        { id: 115, school_name: "Upper Canada College (White)", abbreviation: "UCC�(White", logo_dir: "assets/UCC Logo.png" },
+        { id: 119, school_name: "Upper Canada College (Blue)", abbreviation: "UCC�(Blue", logo_dir: "assets/UCC Logo.png" },
+        { id: 120, school_name: "Montcrest School", abbreviation: "MS", logo_dir: "assets/MC Logo.png" }
+
     ];
 
     // Get school data by abbreviation.
