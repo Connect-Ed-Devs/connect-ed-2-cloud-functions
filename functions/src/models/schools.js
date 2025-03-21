@@ -11,7 +11,7 @@ export class Schools {
         { id: 72, school_name: "Trinity College School", abbreviation: "TCS", logo_dir: "assets/TCS Logo.png" },
         { id: 73, school_name: "Crestwood Preparatory College", abbreviation: "CPC", logo_dir: "assets/CPC Logo.png" },
         { id: 74, school_name: "Hillfield Strathallan College", abbreviation: "HSC", logo_dir: "assets/HSC Logo.png" },
-        { id: 75, school_name: "St. John's Kilmarnock School", abbreviation: "SJK", logo_dir: "assets/SJK Logo.png" },
+        { id: 75, school_name: "St. John's Kilmarnock", abbreviation: "SJK", logo_dir: "assets/SJK Logo.png" },
         { id: 76, school_name: "Lakefield College School", abbreviation: "LCS", logo_dir: "assets/LCS Logo.png" },
         { id: 77, school_name: "Pickering College", abbreviation: "PC", logo_dir: "assets/PC Logo.png" },
         { id: 78, school_name: "Ridley College", abbreviation: "RC", logo_dir: "assets/RC Logo.png" },
@@ -51,7 +51,7 @@ export class Schools {
         { id: 114, school_name: "St. Andrew's College (Red)", abbreviation: "SAC�(Red", logo_dir: "assets/SAC Logo.png" },
         { id: 115, school_name: "Upper Canada College (White)", abbreviation: "UCC�(White", logo_dir: "assets/UCC Logo.png" },
         { id: 119, school_name: "Upper Canada College (Blue)", abbreviation: "UCC�(Blue", logo_dir: "assets/UCC Logo.png" },
-        { id: 120, school_name: "Montcrest School", abbreviation: "MS", logo_dir: "assets/MC Logo.png" }
+        { id: 120, school_name: "Montcrest School", abbreviation: "MS", logo_dir: "assets/MC Logo.png" },
 
     ];
 

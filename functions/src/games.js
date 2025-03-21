@@ -4,6 +4,7 @@ import qs from "qs";
 import {Schools} from "./models/schools.js";
 import {Sports} from "./models/sports.js";
 import {Game} from "./models/game.js";
+import puppeteer from "puppeteer";
 
 /**
  * Helper functions to replace SQL lookups.
@@ -31,102 +32,218 @@ function getMonthIndex(monthName) {
 
 /**
  * inSport: Checks if the sport (using the league code) includes "Appleby College" in its standings.
+ * Uses different scraping approaches based on whether the sport uses Gamesheet.
  */
-export async function inSport(leagueNum, name) {
+export async function inSport(leagueNum, usesGamesheet, browser) {
     try {
-        const response = await axios.request({
-            baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
-            method: "PUT",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            data: qs.stringify({ txtleague: `${leagueNum}` }),
-        });
-        const html = response.data;
-        const $ = cheerio.load(html);
-        let insport = false;
+        if (usesGamesheet) {
+            // For Gamesheet sports
+            const response = await axios.request({
+                baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
+                method: "PUT",
+                headers: { "content-type": "application/x-www-form-urlencoded" },
+                data: qs.stringify({ txtleague: leagueNum }),
+            });
 
-        $("#standings").each((index, element) => {
-            $(element)
-                .find("div>table>tbody>tr")
-                .each((index, element) => {
-                    // Skip the header row
-                    if ($(element).text() !== "TeamsGamesWinLossTiePoints") {
-                        let text = $(element).text();
-                        let teamName = "";
-                        let counter = 0;
-                        while (counter < text.length && text.charAt(counter) !== "-") {
-                            teamName += text.charAt(counter);
-                            counter++;
-                        }
-                        // Remove trailing characters (e.g., spaces or punctuation)
-                        teamName = teamName.substring(0, teamName.length - 2);
-                        if (teamName === "Appleby College") {
-                            insport = true;
-                        }
+            const $ = cheerio.load(response.data);
+            const iframeSrc = $('iframe[src*="gamesheetstats.com/seasons/"]').attr("src");
+
+            if (!iframeSrc) return false;
+
+            // Extract the season code and division ID from the iframe URL
+            const seasonCodeMatch = iframeSrc.match(/seasons\/(\d{4})/);
+            const divisionMatch = iframeSrc.match(/filter\[division\]=(\d{5})/);
+
+            if (!seasonCodeMatch || !divisionMatch) return false;
+
+            const seasonCode = seasonCodeMatch[1];
+            const divisionId = divisionMatch[1];
+
+            // Add retry logic
+            const MAX_RETRIES = 3;
+            let retries = 0;
+
+            while (retries < MAX_RETRIES) {
+                let page;
+                try {
+                    // Open a new *page*, not a new browser
+                    page = await browser.newPage();
+                    await page.setUserAgent(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+                    );
+
+                    const url = `https://gamesheetstats.com/seasons/${seasonCode}/standings?filter%5Bdivision%5D=${divisionId}`;
+                    console.log("Visiting:", url);
+                    await page.goto(url, { waitUntil: "networkidle2" });
+
+                    // Wait for the element to appear (adjust timeout as needed)
+                    await page.waitForSelector('.sc-dOUtaJ.iusowt.column.teamTitle', { timeout: 20000 })
+
+                    // 3. Grab the team names from the relevant elements
+                    const teamTitles = await page.evaluate(() => {
+                        const elements = document.querySelectorAll(".sc-dOUtaJ.iusowt.column.teamTitle");
+                        let titles = [];
+                        elements.forEach(el => {
+                            const lines = el.innerText
+                                .split("\n")
+                                .map(line => line.trim())
+                                .filter(line => line && line !== "TEAM");
+                            titles.push(...lines);
+                        });
+                        return titles;
+                    });
+
+                    await page.close(); // done with this page
+
+                    // Check if "Appleby College" is present
+                    const applebyExists = teamTitles.includes("Appleby College");
+
+                    return applebyExists;
+                } catch (error) {
+                    console.error(`Attempt ${retries + 1} failed for league ${leagueNum}:`, error);
+                    retries++;
+
+                    // Clean up the page if it exists
+                    if (page) {
+                        await page.close().catch(() => {});
                     }
+
+                    if (retries >= MAX_RETRIES) {
+                        console.error(`Failed after ${MAX_RETRIES} attempts for league ${leagueNum}`);
+                        return false;
+                    }
+
+                    // Wait before retrying
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
+
+
+        } else {
+            // Original method for non-Gamesheet sports
+            const response = await axios.request({
+                baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
+                method: "PUT",
+                headers: { "content-type": "application/x-www-form-urlencoded" },
+                data: qs.stringify({ txtleague: leagueNum }),
+            });
+
+            const html = response.data;
+            const $ = cheerio.load(html);
+            let insport = false;
+
+            $("#standings").each((index, element) => {
+                $(element)
+                    .find("div>table>tbody>tr")
+                    .each((index, element) => {
+                        // Skip the header row
+                        if ($(element).text() !== "TeamsGamesWinLossTiePoints") {
+                            let text = $(element).text();
+                            let teamName = "";
+                            let counter = 0;
+                            while (counter < text.length && text.charAt(counter) !== "-") {
+                                teamName += text.charAt(counter);
+                                counter++;
+                            }
+                            // Remove trailing characters (e.g., spaces or punctuation)
+                            teamName = teamName.substring(0, teamName.length - 2);
+                            if (teamName === "Appleby College") {
+                                insport = true;
+                            }
+                        }
+                    });
                 });
-        });
-        return insport;
+            return insport;
+        }
     } catch (err) {
+        console.error("Error in inSport:", err);
         return false;
     }
 }
 
 /**
  * parseSports: Scrapes data on each sports league from the website.
- * Returns an array where each element is [sport name, term, league code].
+ * Returns an array where each element is [sport name, term, league code, isGamesheet].
  */
 export async function parseSports() {
     let sports = [];
+    let browser; // we’ll keep one browser instance
+
     try {
         const response = await axios.request({
             baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
             method: "PUT",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            data: { txtleague: "2860Y8N5D" },
+            headers: {"content-type": "application/x-www-form-urlencoded"},
+            data: {txtleague: "2860Y8N5D"},
         });
         const html = response.data;
         const $ = cheerio.load(html);
 
-        // inSport function is called for each sport to check if "Appleby College" is in the standings
-        const fallPromises = $("#lstFall option").map(async (index, element) => {
-            try {
+        // Initialize Puppeteer browser instance
+        browser = await puppeteer.launch({
+            headless: true,
+            timeout: 0,
+            args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        });
 
-                if (
-                    (await inSport($(element).val(), $(element).text())) &&
-                    $(element).text() !== "FALL"
-                ) {
-                    return [$(element).text(), "Fall", $(element).val()];
-                }
-            } catch (err) {}
-        });
-        const winterPromises = $("#lstWinter option").map(async (index, element) => {
-            try {
-                if (
-                    (await inSport($(element).val(), $(element).text())) &&
-                    $(element).text() !== "WINTER"
-                ) {
-                    return [$(element).text(), "Winter", $(element).val()];
-                }
-            } catch (err) {}
-        });
-        const springPromises = $("#lstSpring option").map(async (index, element) => {
-            try {
-                if (
-                    (await inSport($(element).val(), $(element).text())) &&
-                    $(element).text() !== "SPRING"
-                ) {
-                    return [$(element).text(), "Spring", $(element).val()];
-                }
-            } catch (err) {}
-        });
-        const fallSports = await Promise.all(fallPromises);
-        const winterSports = await Promise.all(winterPromises);
-        const springSports = await Promise.all(springPromises);
-        sports = [...fallSports, ...winterSports, ...springSports].filter(Boolean);
+        // Helper to process all <option> tags in a given season list
+        async function processSeasonList(selector, seasonName) {
+            const promises = $(selector)
+                .map(async (index, element) => {
+                    const leagueCode = $(element).val();
+                    const sportName = $(element).text().trim();
+
+                    // Skip the "FALL"/"WINTER"/"SPRING" label
+                    if (
+                        sportName.toUpperCase() === "FALL" ||
+                        sportName.toUpperCase() === "WINTER" ||
+                        sportName.toUpperCase() === "SPRING"
+                    ) {
+                        return null;
+                    }
+
+                    // Check if this league uses Gamesheet
+                    const sportRecord = Sports.getSportByLeagueCode(leagueCode);
+                    const usesGamesheet = sportRecord[3];
+
+                    // 3. Check if Appleby is in this sport
+                    const isApplebyInSport = await inSport(
+                        leagueCode,
+                        usesGamesheet,
+                        browser // pass the existing browser
+                    );
+
+                    if (isApplebyInSport) {
+                        return [sportName, seasonName, leagueCode, usesGamesheet];
+                    }
+
+                    return null;
+                })
+                .get(); // convert Cheerio array to a normal array of Promises
+
+            // Wait for all in this season
+            const results = await Promise.all(promises);
+            return results.filter(Boolean);
+        }
+
+        // 3. Process Fall, Winter, Spring in parallel
+        const [fallSports, winterSports, springSports] = await Promise.all([
+            processSeasonList("#lstFall option", "Fall"),
+            processSeasonList("#lstWinter option", "Winter"),
+            processSeasonList("#lstSpring option", "Spring"),
+        ]);
+
+        // Combine results
+        sports = [...fallSports, ...winterSports, ...springSports];
         return sports;
     } catch (err) {
         console.error("Error in parseSports:", err);
         return sports;
+    } finally {
+        // 4. Close the browser once all leagues are processed
+        if (browser) {
+            await browser.close();
+        }
     }
 }
 

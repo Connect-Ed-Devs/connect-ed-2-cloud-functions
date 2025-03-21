@@ -52,6 +52,7 @@ export async function setSports() {
             name: sportArr[0],
             term: sportArr[1],
             league_code: sportArr[2],
+            uses_gamesheet: sportArr[3]
         });
     });
     await batch.commit();
@@ -109,7 +110,7 @@ export async function setAll() {
  * Retrieve data from Firestore.
  */
 export async function getSports() {
-    const snapshot = await db.collection("Sports").get();
+    const snapshot = await db.collection('Sports').get();
     const sports = [];
     snapshot.forEach(doc => sports.push(doc.data()));
     return sports;
