@@ -5,6 +5,8 @@ import {Schools} from "./models/schools.js";
 import {Sports} from "./models/sports.js";
 import {Game} from "./models/game.js";
 import puppeteer from "puppeteer";
+import { BaseStandings } from "./models/StandingsClasses.js";
+import {parseGameSheetHockeyStandings, parseGameSheetSoccerStandings} from "./gamesheet.js";
 
 /**
  * Helper functions to replace SQL lookups.
@@ -21,20 +23,24 @@ async function getSchoolIDAbbrev(schoolAbbrev) {
     return school ? school.id : null;
 }
 
-export async function getSchoolIDName(schoolName) {
-    const school = Schools.getSchoolByName(schoolName);
-    return school ? school.id : null;
+export async function getSchoolIDName(teamName) {
+    // Retrieve an array of all school records
+    const allSchools = Schools.getAllSchools();
+    // Try to find a school whose full name is included in the teamName string
+    const schoolRecord = allSchools.find(school => teamName.includes(school.school_name));
+    return schoolRecord ? schoolRecord.id : null;
 }
 
 function getMonthIndex(monthName) {
     return new Date(Date.parse(monthName + " 1, 2000")).getMonth() + 1;
 }
 
+
 /**
  * inSport: Checks if the sport (using the league code) includes "Appleby College" in its standings.
  * Uses different scraping approaches based on whether the sport uses Gamesheet.
  */
-export async function inSport(leagueNum, usesGamesheet, browser) {
+export async function inSport(leagueNum, usesGamesheet, browser)    {
     try {
         if (usesGamesheet) {
             // For Gamesheet sports
@@ -252,7 +258,97 @@ export async function parseSports() {
  * Returns an array of objects, each containing team name, games played, wins, ties, losses, points,
  * table number, sport ID, school ID, and standings code.
  */
-export async function parseStandings(leagueNum){
+export async function parseStandings(leagueNum, usesGamesheet, browser) {
+    if (!usesGamesheet){
+        return parseCISAAStandings(leagueNum);
+    }
+
+    // 1) If it’s a GameSheet league, get the season code and division ID from the iframe URL
+    const response = await axios.request({
+        baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
+        method: "PUT",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        data: qs.stringify({ txtleague: leagueNum }),
+    });
+
+    const html = response.data;
+    const $ = cheerio.load(html);
+
+    const iframeSrc = $('iframe[src*="gamesheetstats.com/seasons/"]').attr("src");
+    if (!iframeSrc) {
+        console.error("No iframe found for league:", leagueNum);
+        return [];
+    }
+
+    // Extract the season code and division ID from the iframe URL
+    const seasonCodeMatch = iframeSrc.match(/seasons\/(\d{4})/);
+    const divisionMatch = iframeSrc.match(/filter\[division\]=(\d{5})/);
+    if (!seasonCodeMatch || !divisionMatch) {
+        console.error("Season code or division ID not found in the iframe URL");
+        return [];
+    }
+
+    const seasonCode = seasonCodeMatch[1];
+    const divisionId = divisionMatch[1];
+
+    // 2) If it’s a GameSheet league, check if a browser was provided
+    let localBrowser = browser;
+    let createdBrowser = false;
+
+    if (!localBrowser) {
+        // No browser was passed => open a new one
+        localBrowser = await puppeteer.launch({
+            headless: true,
+            timeout: 0,
+            args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        });
+        createdBrowser = true;
+    }
+
+    try {
+
+        // Check whether the sport is soccer or hockey
+        const sportRecord = Sports.getSportByLeagueCode(leagueNum);
+        const sportName = sportRecord[0];
+        const isSoccer = sportName.toLowerCase().includes("soccer");
+        const isHockey = sportName.toLowerCase().includes("hockey");
+        if (!isSoccer && !isHockey) {
+            console.error(`Unsupported sport for GameSheet: ${sportName}`);
+            return [];
+        }
+
+        let standings = [];
+
+        // If it’s soccer, use the soccer-specific scraping function
+        if (isSoccer) {
+            standings = await parseGameSheetSoccerStandings(seasonCode, divisionId, localBrowser);
+        }
+
+        // If it’s hockey, use the hockey-specific scraping function
+        if (isHockey) {
+            standings = await parseGameSheetHockeyStandings(seasonCode, divisionId, localBrowser);
+        }
+
+        // 4) Add missing properties to each standings object
+        const processedStandings = await Promise.all(standings.map(async standing => {
+            const schoolID = await getSchoolIDName(standing.teamName);
+            standing.sportId = leagueNum;
+            standing.schoolId = schoolID;
+            standing.standingsCode = `S_${schoolID}_${leagueNum}`;
+            return standing;
+        }));
+        return processedStandings.filter(item => item !== undefined);
+
+    } finally {
+        // 4) If we created the browser in this function, close it here
+        if (createdBrowser && localBrowser) {
+            await localBrowser.close();
+        }
+    }
+
+}
+
+async function parseCISAAStandings(leagueNum){
     try {
         const response = await axios.request({
             baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
@@ -275,25 +371,26 @@ export async function parseStandings(leagueNum){
                     counter++;
                 }
                 teamName = teamName.substring(0, teamName.length - 2);
-                const games_played = parseInt($(element).find(".col2").text().trim());
+                const gamesPlayed = parseInt($(element).find(".col2").text().trim());
                 const wins = parseInt($(element).find(".col3").text().trim());
                 const losses = parseInt($(element).find(".col4").text().trim());
                 const ties = parseInt($(element).find(".col5").text().trim());
                 const points = parseInt($(element).find(".col6").text().trim());
                 const schoolID = await getSchoolIDName(teamName);
-                const standings_code = `S_${schoolID}_${sportID}`;
-                return {
-                    team_name: teamName,
-                    games_played,
+                const standingsCode = `S_${schoolID}_${sportID}`;
+
+                return new BaseStandings({
+                    teamName,
+                    gamesPlayed,
                     wins,
-                    ties,
                     losses,
+                    ties,
                     points,
-                    table_num: 1,
-                    sport_id: sportID,
-                    school_id: schoolID,
-                    standings_code,
-                };
+                    tableNum: 1,
+                    sportId: leagueNum,
+                    schoolId: schoolID,
+                    standingsCode,
+                });
             })
             .get();
 
@@ -308,25 +405,26 @@ export async function parseStandings(leagueNum){
                     counter++;
                 }
                 teamName = teamName.substring(0, teamName.length - 2);
-                const games_played = parseInt($(element).find(".col2").text().trim());
+                const gamesPlayed = parseInt($(element).find(".col2").text().trim());
                 const wins = parseInt($(element).find(".col3").text().trim());
                 const losses = parseInt($(element).find(".col4").text().trim());
                 const ties = parseInt($(element).find(".col5").text().trim());
                 const points = parseInt($(element).find(".col6").text().trim());
                 const schoolID = await getSchoolIDName(teamName);
-                const standings_code = `S_${schoolID}_${sportID}`;
-                return {
-                    team_name: teamName,
-                    games_played,
+                const standingsCode = `S_${schoolID}_${sportID}`;
+
+                return new BaseStandings({
+                    teamName,
+                    gamesPlayed,
                     wins,
-                    ties,
                     losses,
+                    ties,
                     points,
-                    table_num: 2,
-                    sport_id: sportID,
-                    school_id: schoolID,
-                    standings_code,
-                };
+                    tableNum: 2,
+                    sportId: leagueNum,
+                    schoolId: schoolID,
+                    standingsCode,
+                });
             })
             .get();
 
@@ -338,6 +436,7 @@ export async function parseStandings(leagueNum){
         console.error("Error in parseStandings:", err);
         return [];
     }
+
 }
 
 /**

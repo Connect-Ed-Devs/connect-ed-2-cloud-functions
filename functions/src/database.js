@@ -1,3 +1,4 @@
+import puppeteer from "puppeteer";
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { parseSports, parseStandings, parseGames } from "./games.js";
@@ -62,16 +63,19 @@ export async function setSports() {
  * setStandings:
  * Scrapes standings data and writes/updates each document in the "Standings" collection.
  */
-export async function setStandings(leagueCode) {
-    const standings = await parseStandings(leagueCode);
+export async function setStandings(leagueCode, usesGamesheet) {
+    const standings = await parseStandings(leagueCode, usesGamesheet);
     const batch = db.batch();
     standings.forEach((standing) => {
-        // Create reference to the standings subcollection within the sport document
+        // Convert instance to plain object using toMap() if available
+        const data = typeof standing.toMap === 'function'
+            ? standing.toMap()
+            : Object.assign({}, standing);
         const docRef = db.collection("Sports")
             .doc(leagueCode)
             .collection("Standings")
-            .doc(standing.standings_code);
-        batch.set(docRef, standing, { merge: true });
+            .doc(standing.standingsCode);
+        batch.set(docRef, data, { merge: true });
     });
     await batch.commit();
 }
@@ -98,8 +102,9 @@ export async function setAll() {
     await setSports();
     const sports = await getSports();
     const promises = sports.map(async (sport) => {
-        await setStandings(sport.league_code);
+        await setStandings(sport.league_code, sport.uses_gamesheet);
         await setGames(sport.league_code);
+
     });
     await Promise.all(promises);
 }
@@ -166,12 +171,39 @@ export async function updateGamesStandings() {
     const today = new Date();
     const season = getSeason(today);
     let filteredSports = season !== "Unknown" ? sports.filter(sport => sport.term === season) : sports;
-    const promises = filteredSports.map(async (sport) => {
-        await setGames(sport.league_code);
-        await setStandings(sport.league_code);
-    });
-    await Promise.all(promises);
-    console.log("Games and standings updated in Firestore");
+
+    // 2. Check if any sport uses GameSheet
+    const hasGameSheetSport = filteredSports.some(sport => sport.usesGamesheet);
+
+    let browser;
+
+    try {
+        // 3. Launch ONE browser if needed
+        if (hasGameSheetSport) {
+            browser = await puppeteer.launch({
+                headless: true,
+                timeout: 0,
+                args: ["--no-sandbox", "--disable-setuid-sandbox"],
+            });
+        }
+
+        // 4. For each sport, set games and standings using the same browser
+        const promises = filteredSports.map(async (sport) => {
+            await setGames(sport.league_code);  // existing function
+            await setStandings(sport.league_code, sport.usesGamesheet, browser);
+        });
+
+        await Promise.all(promises);
+
+        console.log("Games and standings updated in Firestore");
+    } catch (err) {
+        console.error("Error in updateGamesStandings:", err);
+    } finally {
+        // 5. Close the browser once all sports are processed
+        if (browser) {
+            await browser.close();
+        }
+    }
 }
 
 function getSeason(date) {
