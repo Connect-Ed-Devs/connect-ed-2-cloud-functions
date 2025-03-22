@@ -6,7 +6,8 @@ import {Sports} from "./models/sports.js";
 import {Game} from "./models/game.js";
 import puppeteer from "puppeteer";
 import { BaseStandings } from "./models/StandingsClasses.js";
-import {parseGameSheetHockeyStandings, parseGameSheetSoccerStandings} from "./gamesheet.js";
+import {parseGameSheetHockeyStandings, parseGameSheetSoccerStandings, parseGameIDs} from "./gamesheet.js";
+import {getStandings, getApplebyTeamCode} from "./database.js";
 
 /**
  * Helper functions to replace SQL lookups.
@@ -259,6 +260,97 @@ export async function parseSports() {
  * table number, sport ID, school ID, and standings code.
  */
 export async function parseStandings(leagueNum, usesGamesheet, browser) {
+    async function parseCISAAStandings(leagueNum){
+        try {
+            const response = await axios.request({
+                baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
+                method: "PUT",
+                headers: { "content-type": "application/x-www-form-urlencoded" },
+                data: qs.stringify({ txtleague: `${leagueNum}` }),
+            });
+            const html = response.data;
+            const $ = cheerio.load(html);
+            const sportID = await leagueNum;
+
+            const standingPromises1 = $("#standingsTable1")
+                .find("tr")
+                .map(async (index, element) => {
+                    let rawName = $(element).find(".col1").text().trim();
+                    let teamName = "";
+                    let counter = 0;
+                    while (counter < rawName.length && rawName.charAt(counter) !== "-") {
+                        teamName += rawName.charAt(counter);
+                        counter++;
+                    }
+                    teamName = teamName.substring(0, teamName.length - 2);
+                    const gamesPlayed = parseInt($(element).find(".col2").text().trim());
+                    const wins = parseInt($(element).find(".col3").text().trim());
+                    const losses = parseInt($(element).find(".col4").text().trim());
+                    const ties = parseInt($(element).find(".col5").text().trim());
+                    const points = parseInt($(element).find(".col6").text().trim());
+                    const schoolID = await getSchoolIDName(teamName);
+                    const standingsCode = `S_${schoolID}_${sportID}`;
+
+                    return new BaseStandings({
+                        teamName,
+                        gamesPlayed,
+                        wins,
+                        losses,
+                        ties,
+                        points,
+                        tableNum: 1,
+                        sportId: leagueNum,
+                        schoolId: schoolID,
+                        standingsCode,
+                    });
+                })
+                .get();
+
+            const standingPromises2 = $("#standingsTable2")
+                .find("tr")
+                .map(async (index, element) => {
+                    let rawName = $(element).find(".col1").text().trim();
+                    let teamName = "";
+                    let counter = 0;
+                    while (counter < rawName.length && rawName.charAt(counter) !== "-") {
+                        teamName += rawName.charAt(counter);
+                        counter++;
+                    }
+                    teamName = teamName.substring(0, teamName.length - 2);
+                    const gamesPlayed = parseInt($(element).find(".col2").text().trim());
+                    const wins = parseInt($(element).find(".col3").text().trim());
+                    const losses = parseInt($(element).find(".col4").text().trim());
+                    const ties = parseInt($(element).find(".col5").text().trim());
+                    const points = parseInt($(element).find(".col6").text().trim());
+                    const schoolID = await getSchoolIDName(teamName);
+                    const standingsCode = `S_${schoolID}_${sportID}`;
+
+                    return new BaseStandings({
+                        teamName,
+                        gamesPlayed,
+                        wins,
+                        losses,
+                        ties,
+                        points,
+                        tableNum: 2,
+                        sportId: leagueNum,
+                        schoolId: schoolID,
+                        standingsCode,
+                    });
+                })
+                .get();
+
+            let standings = await Promise.all(standingPromises1);
+            const standings2 = await Promise.all(standingPromises2);
+            standings = [...standings, ...standings2].filter(item => item !== undefined);
+            return standings;
+        } catch (err) {
+            console.error("Error in parseStandings:", err);
+            return [];
+        }
+
+    }
+
     if (!usesGamesheet){
         return parseCISAAStandings(leagueNum);
     }
@@ -348,185 +440,160 @@ export async function parseStandings(leagueNum, usesGamesheet, browser) {
 
 }
 
-async function parseCISAAStandings(leagueNum){
-    try {
-        const response = await axios.request({
-            baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
-            method: "PUT",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            data: qs.stringify({ txtleague: `${leagueNum}` }),
-        });
-        const html = response.data;
-        const $ = cheerio.load(html);
-        const sportID = await leagueNum;
-
-        const standingPromises1 = $("#standingsTable1")
-            .find("tr")
-            .map(async (index, element) => {
-                let rawName = $(element).find(".col1").text().trim();
-                let teamName = "";
-                let counter = 0;
-                while (counter < rawName.length && rawName.charAt(counter) !== "-") {
-                    teamName += rawName.charAt(counter);
-                    counter++;
-                }
-                teamName = teamName.substring(0, teamName.length - 2);
-                const gamesPlayed = parseInt($(element).find(".col2").text().trim());
-                const wins = parseInt($(element).find(".col3").text().trim());
-                const losses = parseInt($(element).find(".col4").text().trim());
-                const ties = parseInt($(element).find(".col5").text().trim());
-                const points = parseInt($(element).find(".col6").text().trim());
-                const schoolID = await getSchoolIDName(teamName);
-                const standingsCode = `S_${schoolID}_${sportID}`;
-
-                return new BaseStandings({
-                    teamName,
-                    gamesPlayed,
-                    wins,
-                    losses,
-                    ties,
-                    points,
-                    tableNum: 1,
-                    sportId: leagueNum,
-                    schoolId: schoolID,
-                    standingsCode,
-                });
-            })
-            .get();
-
-        const standingPromises2 = $("#standingsTable2")
-            .find("tr")
-            .map(async (index, element) => {
-                let rawName = $(element).find(".col1").text().trim();
-                let teamName = "";
-                let counter = 0;
-                while (counter < rawName.length && rawName.charAt(counter) !== "-") {
-                    teamName += rawName.charAt(counter);
-                    counter++;
-                }
-                teamName = teamName.substring(0, teamName.length - 2);
-                const gamesPlayed = parseInt($(element).find(".col2").text().trim());
-                const wins = parseInt($(element).find(".col3").text().trim());
-                const losses = parseInt($(element).find(".col4").text().trim());
-                const ties = parseInt($(element).find(".col5").text().trim());
-                const points = parseInt($(element).find(".col6").text().trim());
-                const schoolID = await getSchoolIDName(teamName);
-                const standingsCode = `S_${schoolID}_${sportID}`;
-
-                return new BaseStandings({
-                    teamName,
-                    gamesPlayed,
-                    wins,
-                    losses,
-                    ties,
-                    points,
-                    tableNum: 2,
-                    sportId: leagueNum,
-                    schoolId: schoolID,
-                    standingsCode,
-                });
-            })
-            .get();
-
-        let standings = await Promise.all(standingPromises1);
-        const standings2 = await Promise.all(standingPromises2);
-        standings = [...standings, ...standings2].filter(item => item !== undefined);
-        return standings;
-    } catch (err) {
-        console.error("Error in parseStandings:", err);
-        return [];
-    }
-
-}
-
 /**
  * parseGames: Scrapes game data for a specific sport and returns an array of Game objects.
  * Returns an array of Game objects.
  */
-export async function parseGames(leagueNum) {
+export async function parseGames(leagueNum, usesGamesheet, browser) {
     // Get sport from leagueNum
     const sport = Sports.getSportByLeagueCode(leagueNum);
     if (!sport) {
         console.error(`Sport not found for league number: ${leagueNum}`);
         return [];
     }
-    try {
-        const response = await axios.request({
-            baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
-            method: "PUT",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            data: qs.stringify({ txtleague: `${leagueNum}` }),
-        });
-        const html = response.data;
-        const $ = cheerio.load(html);
-        const sport_id = await getSportID(leagueNum);
-        const gamePromises = $("#scheduleTable tr")
-            .map(async (index, element) => {
-                const $tdElements = $(element).find("td");
-                let date = $tdElements.eq(0).text().trim().substring(4, 10);
-                const targetMonth = date.split(" ")[0];
-                const targetDay = date.split(" ")[1];
-                const targetMonthIndex = getMonthIndex(targetMonth);
-                const today = new Date();
-                const month = today.getMonth() + 1;
-                let year = today.getFullYear();
-                if (month >= 9) { year++; }
-                if (targetMonthIndex >= 9) { year--; }
-                const stringTargetMonthIndex = targetMonthIndex > 9 ? targetMonthIndex.toString() : `0${targetMonthIndex}`;
-                date = `${year}-${stringTargetMonthIndex}-${targetDay}`;
-                let time = $tdElements.eq(1).text().trim();
-                time = time.substring(6, 7) === "a" ? time.substring(0, 6) + "AM" : time.substring(0, 6) + "PM";
-                time = time.charAt(0) === "0" ? time.substring(1, 8) : time.substring(0, 8);
-                let homeAbbr = $tdElements.eq(2).text().trim();
-                homeAbbr = homeAbbr.substring(0, homeAbbr.length - 1);
-                const homeScore = $tdElements.eq(3).text().trim();
-                let awayAbbr = $tdElements.eq(4).text().trim();
-                awayAbbr = awayAbbr.substring(0, awayAbbr.length - 1);
-                const awayScore = $tdElements.eq(5).text().trim();
-                if (homeAbbr === "AC" || awayAbbr === "AC") {
-                    let home_id = await getSchoolIDAbbrev(homeAbbr);
-                    let away_id = await getSchoolIDAbbrev(awayAbbr);
 
-                    // Get full team names from Schools model using abbreviations
-                    const homeSchool = Schools.getSchoolByAbbreviation(homeAbbr);
-                    const awaySchool = Schools.getSchoolByAbbreviation(awayAbbr);
+    async function parseCISAAGames(leagueNum){
+        try {
+            const response = await axios.request({
+                baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
+                method: "PUT",
+                headers: { "content-type": "application/x-www-form-urlencoded" },
+                data: qs.stringify({ txtleague: `${leagueNum}` }),
+            });
+            const html = response.data;
+            const $ = cheerio.load(html);
+            const sport_id = await getSportID(leagueNum);
+            const gamePromises = $("#scheduleTable tr")
+                .map(async (index, element) => {
+                    const $tdElements = $(element).find("td");
+                    let date = $tdElements.eq(0).text().trim().substring(4, 10);
+                    const targetMonth = date.split(" ")[0];
+                    const targetDay = date.split(" ")[1];
+                    const targetMonthIndex = getMonthIndex(targetMonth);
+                    const today = new Date();
+                    const month = today.getMonth() + 1;
+                    let year = today.getFullYear();
+                    if (month >= 9) { year++; }
+                    if (targetMonthIndex >= 9) { year--; }
+                    const stringTargetMonthIndex = targetMonthIndex > 9 ? targetMonthIndex.toString() : `0${targetMonthIndex}`;
+                    date = `${year}-${stringTargetMonthIndex}-${targetDay}`;
+                    let time = $tdElements.eq(1).text().trim();
+                    time = time.substring(6, 7) === "a" ? time.substring(0, 6) + "AM" : time.substring(0, 6) + "PM";
+                    time = time.charAt(0) === "0" ? time.substring(1, 8) : time.substring(0, 8);
+                    let homeAbbr = $tdElements.eq(2).text().trim();
+                    homeAbbr = homeAbbr.substring(0, homeAbbr.length - 1);
+                    const homeScore = $tdElements.eq(3).text().trim();
+                    let awayAbbr = $tdElements.eq(4).text().trim();
+                    awayAbbr = awayAbbr.substring(0, awayAbbr.length - 1);
+                    const awayScore = $tdElements.eq(5).text().trim();
+                    if (homeAbbr === "AC" || awayAbbr === "AC") {
+                        let home_id = await getSchoolIDAbbrev(homeAbbr);
+                        let away_id = await getSchoolIDAbbrev(awayAbbr);
+
+                        // Get full team names from Schools model using abbreviations
+                        const homeSchool = Schools.getSchoolByAbbreviation(homeAbbr);
+                        const awaySchool = Schools.getSchoolByAbbreviation(awayAbbr);
 
 
-                    // Check if homeSchool and awaySchool are not null
-                    if (!homeSchool || !awaySchool) {
-                        console.error(`School not found for abbreviation: ${homeAbbr} or ${awayAbbr} in ${leagueNum}`);
-                        return undefined;
+                        // Check if homeSchool and awaySchool are not null
+                        if (!homeSchool || !awaySchool) {
+                            console.error(`School not found for abbreviation: ${homeAbbr} or ${awayAbbr} in ${leagueNum}`);
+                            return undefined;
+                        }
+
+                        const homeTeam = homeSchool.school_name;
+                        const awayTeam = awaySchool.school_name;
+
+                        // Create a Game instance.
+                        const game = new Game({
+                            homeTeam: homeTeam,
+                            homeAbbr: homeAbbr,
+                            homeLogo: homeSchool.logo_dir,
+                            awayTeam: awayTeam,
+                            awayAbbr: awayAbbr,
+                            awayLogo: awaySchool.logo_dir,
+                            homeScore: homeScore,
+                            awayScore: awayScore,
+                            gameDate: new Date(date),
+                            gameTime: time,
+                            sportsId: sport_id,
+                            sportsName: sport[0],
+                            term: sport[1],
+                            leagueCode: leagueNum,
+                            gameCode: `G_${home_id}_${away_id}_${date.replace(/-/g, '_')}_${sport_id}`,
+                        });
+                        return game.toMap();
                     }
+                })
+                .get();
+            const games = await Promise.all(gamePromises);
+            return games.filter(item => item !== undefined);
+        } catch (err) {
+            console.error("Error in parseGames:", err);
+            return [];
+        }
+    }
 
-                    const homeTeam = homeSchool.school_name;
-                    const awayTeam = awaySchool.school_name;
+    if (!usesGamesheet){
+        return parseCISAAGames(leagueNum);
+    }
 
-                    // Create a Game instance.
-                    const game = new Game({
-                        homeTeam: homeTeam,
-                        homeAbbr: homeAbbr,
-                        homeLogo: homeSchool.logo_dir,
-                        awayTeam: awayTeam,
-                        awayAbbr: awayAbbr,
-                        awayLogo: awaySchool.logo_dir,
-                        homeScore: homeScore,
-                        awayScore: awayScore,
-                        gameDate: new Date(date),
-                        gameTime: time,
-                        sportsId: sport_id,
-                        sportsName: sport[0],
-                        term: sport[1],
-                        leagueCode: leagueNum,
-                        gameCode: `G_${home_id}_${away_id}_${date.replace(/-/g, '_')}_${sport_id}`,
-                    });
-                    return game.toMap();
-                }
-            })
-            .get();
-        const games = await Promise.all(gamePromises);
-        return games.filter(item => item !== undefined);
-    } catch (err) {
-        console.error("Error in parseGames:", err);
+    // 1) If it’s a GameSheet league, get the season code and division ID from the iframe URL
+    const response = await axios.request({
+        baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
+        method: "PUT",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        data: qs.stringify({ txtleague: leagueNum }),
+    });
+
+    const html = response.data;
+    const $ = cheerio.load(html);
+
+    const iframeSrc = $('iframe[src*="gamesheetstats.com/seasons/"]').attr("src");
+    if (!iframeSrc) {
+        console.error("No iframe found for league:", leagueNum);
         return [];
+    }
+
+    // Extract the season code and division ID from the iframe URL
+    const seasonCodeMatch = iframeSrc.match(/seasons\/(\d{4})/);
+    const divisionMatch = iframeSrc.match(/filter\[division\]=(\d{5})/);
+    if (!seasonCodeMatch || !divisionMatch) {
+        console.error("Season code or division ID not found in the iframe URL");
+        return [];
+    }
+
+    const seasonCode = seasonCodeMatch[1];
+    const divisionId = divisionMatch[1];
+
+    // If it's a gamesheet league, get the team code from firebase standings and determine by name "Appleby College"
+    const applebyTeamCode = await getApplebyTeamCode(leagueNum);
+    console.log(applebyTeamCode)
+
+    //If it’s a GameSheet league, check if a browser was provided
+    let localBrowser = browser;
+    let createdBrowser = false;
+
+    if (!localBrowser) {
+        // No browser was passed => open a new one
+        localBrowser = await puppeteer.launch({
+            headless: false,
+            timeout: 0,
+            args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        });
+        createdBrowser = true;
+    }
+
+    try {
+        console.log("here")
+
+        //get gameids from gamesheet
+        const gameIds = await parseGameIDs(seasonCode, divisionId, applebyTeamCode, localBrowser);
+        return []
+    } finally {
+        // 4) If we created the browser in this function, close it here
+        if (createdBrowser && localBrowser) {
+            await localBrowser.close();
+        }
     }
 }

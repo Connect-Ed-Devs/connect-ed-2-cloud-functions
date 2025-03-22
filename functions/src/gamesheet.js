@@ -249,3 +249,31 @@ export async function parseGameSheetHockeyStandings(seasonCode, divisionId, brow
         }
     }
 }
+
+export async function parseGameIDs(seasonCode, divisionId, applebyTeamCode, browser) {
+    let page;
+    try {
+        page = await browser.newPage();
+        await page.setUserAgent(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+        );
+
+        const url = `https://gamesheetstats.com/seasons/${seasonCode}/teams/${applebyTeamCode}/schedule?filter%5Bdivision%5D=${divisionId}`;
+        console.log("Visiting:", url);
+        await page.goto(url, {waitUntil: "networkidle2"});
+
+        // Wait for the standings table element to appear
+        await page.waitForSelector('.sc-dOUtaJ.iusowt.column.visitor', {timeout: 20000});
+
+        const content = await page.evaluate(() => document.body.innerHTML);
+        console.log(content);
+
+    } catch (error) {
+        console.error("Error in parseGameSheetHockeyStandings:", error);
+        return [];
+    } finally {
+        if (page) {
+            await page.close();
+        }
+    }
+}

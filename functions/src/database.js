@@ -63,8 +63,8 @@ export async function setSports() {
  * setStandings:
  * Scrapes standings data and writes/updates each document in the "Standings" collection.
  */
-export async function setStandings(leagueCode, usesGamesheet) {
-    const standings = await parseStandings(leagueCode, usesGamesheet);
+export async function setStandings(leagueCode, usesGamesheet, browser) {
+    const standings = await parseStandings(leagueCode, usesGamesheet, browser);
     const batch = db.batch();
     standings.forEach((standing) => {
         // Convert instance to plain object using toMap() if available
@@ -84,8 +84,8 @@ export async function setStandings(leagueCode, usesGamesheet) {
  * setGames:
  * Scrapes game data and writes/updates each document in the "Games" collection.
  */
-export async function setGames(leagueCode) {
-    const games = await parseGames(leagueCode);
+export async function setGames(leagueCode, usesGamesheet, browser) {
+    const games = await parseGames(leagueCode, usesGamesheet, browser);
     const batch = db.batch();
     games.forEach((game) => {
         const docRef = db.collection("Games").doc(game.game_code);
@@ -103,7 +103,7 @@ export async function setAll() {
     const sports = await getSports();
     const promises = sports.map(async (sport) => {
         await setStandings(sport.league_code, sport.uses_gamesheet);
-        await setGames(sport.league_code);
+        await setGames(sport.league_code, sport.uses_gamesheet);
 
     });
     await Promise.all(promises);
@@ -161,6 +161,23 @@ export async function getAllGames() {
     return games;
 }
 
+export async function getApplebyTeamCode(leagueNum) {
+    try {
+        const applebySnapshot = await db.collection("Sports")
+            .doc(leagueNum)
+            .collection("Standings")
+            .where("teamName", "==", "Appleby College")
+            .limit(1)
+            .get();
+
+        if (applebySnapshot.empty) return null;
+        return applebySnapshot.docs[0].data().gamesheetTeamId || null;
+    } catch (error) {
+        console.error("Error getting Appleby team code:", error);
+        return null;
+    }
+}
+
 /**
  * updateGamesStandings:
  * Uses getSports() to retrieve sports from Firestore, then updates games and standings for each.
@@ -189,7 +206,7 @@ export async function updateGamesStandings() {
 
         // 4. For each sport, set games and standings using the same browser
         const promises = filteredSports.map(async (sport) => {
-            await setGames(sport.league_code);  // existing function
+            await setGames(sport.league_code, sport );  // existing function
             await setStandings(sport.league_code, sport.usesGamesheet, browser);
         });
 
