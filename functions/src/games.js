@@ -3,10 +3,15 @@ import * as cheerio from "cheerio";
 import qs from "qs";
 import {Schools} from "./models/schools.js";
 import {Sports} from "./models/sports.js";
-import {Game} from "./models/game.js";
+import {BaseGame} from "./models/GameClasses.js";
 import puppeteer from "puppeteer";
 import { BaseStandings } from "./models/StandingsClasses.js";
-import {parseGameSheetHockeyStandings, parseGameSheetSoccerStandings, parseGameIDs} from "./gamesheet.js";
+import {
+    parseGameSheetHockeyStandings,
+    parseGameSheetSoccerStandings,
+    parseGameIDs,
+    parseGameSheetGames
+} from "./gamesheet.js";
 import {getStandings, getApplebyTeamCode} from "./database.js";
 
 /**
@@ -505,7 +510,7 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
                         const awayTeam = awaySchool.school_name;
 
                         // Create a Game instance.
-                        const game = new Game({
+                        const game = new BaseGame({
                             homeTeam: homeTeam,
                             homeAbbr: homeAbbr,
                             homeLogo: homeSchool.logo_dir,
@@ -577,7 +582,7 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
     if (!localBrowser) {
         // No browser was passed => open a new one
         localBrowser = await puppeteer.launch({
-            headless: false,
+            headless: true,
             timeout: 0,
             args: ["--no-sandbox", "--disable-setuid-sandbox"],
         });
@@ -589,6 +594,16 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
 
         //get gameids from gamesheet
         const gameIds = await parseGameIDs(seasonCode, divisionId, applebyTeamCode, localBrowser);
+        console.log('Unique Game IDs:', gameIds);
+
+        if (gameIds && gameIds.length > 0) {
+            const games = await parseGameSheetGames(seasonCode, gameIds, localBrowser);
+            return games;
+        }
+
+        //for each game id, get the game data
+
+
         return []
     } finally {
         // 4) If we created the browser in this function, close it here

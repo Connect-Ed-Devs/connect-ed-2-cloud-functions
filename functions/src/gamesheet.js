@@ -265,11 +265,80 @@ export async function parseGameIDs(seasonCode, divisionId, applebyTeamCode, brow
         // Wait for the standings table element to appear
         await page.waitForSelector('.sc-dOUtaJ.iusowt.column.visitor', {timeout: 20000});
 
-        const content = await page.evaluate(() => document.body.innerHTML);
-        console.log(content);
+        // Extract game IDs from the page
+        const gameIds = await page.evaluate(() => {
+            const links = document.querySelectorAll('a[href*="/games/"]');
+            // Convert NodeList to array and extract the numeric gameId via regex
+            return Array.from(links).map(link => {
+                const match = link.href.match(/\/games\/(\d+)/);
+                return match ? match[1] : null;
+            }).filter(Boolean);  // remove nulls
+        });
+
+        // Deduplicate game IDs and return
+        return [...new Set(gameIds)];
 
     } catch (error) {
         console.error("Error in parseGameSheetHockeyStandings:", error);
+        return [];
+    } finally {
+        if (page) {
+            await page.close();
+        }
+    }
+}
+
+export async function parseGameSheetGames(seasonCode, gameIds, browser) {
+    let page;
+    try {
+        page = await browser.newPage();
+        await page.setUserAgent(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+        );
+
+        // Loop through each gameId and visit the corresponding page
+        let games = [];
+        /*
+        for (const gameId of gameIds) {
+            const url = `https://gamesheetstats.com/seasons/${seasonCode}/games/${gameId}`;
+            console.log("Visiting:", url);
+            await page.goto(url, {waitUntil: "networkidle2"});
+
+            // Wait for the scores element to appear
+            await page.waitForSelector('.sc-eDHQDy.jYdCkq.boxscore-game-score.w-full.items-center.flex.flex-row.justify-center.gap-4', {timeout: 20000});
+
+            const content = await page.evaluate(() => document.body.innerHTML);
+            console.log(content);
+
+        }*/
+
+        const url = `https://gamesheetstats.com/seasons/${seasonCode}/games/${gameIds[0]}`;
+        console.log("Visiting:", url);
+        await page.goto(url, {waitUntil: "networkidle2"});
+
+        // Wait for the scores element to appear
+        await page.waitForSelector('.sc-eDHQDy.jYdCkq.boxscore-game-score.w-full.items-center.flex.flex-row.justify-center.gap-4', {timeout: 20000});
+
+        const gameData = await page.evaluate(() => {
+
+            // Extract the game data from the page
+            const gameEl = document.querySelector('[data-testid="boxscore-container"]');
+
+            // For scores:
+            const homeScore = gameEl.querySelector('[data-testid="home-score"]')?.textContent.trim() || '';
+            const awayScore = gameEl.querySelector('[data-testid="visitor-score"]')?.textContent.trim() || '';
+
+            return {
+                homeScore,
+                awayScore,
+            };
+
+        });
+        console.log(gameData);
+        return [];
+
+    } catch (error) {
+        console.error("Error in parseGameSheetGames:", error);
         return [];
     } finally {
         if (page) {

@@ -113,3 +113,4 @@ export class HockeyStandings extends BaseStandings {
         this.gamesheetTeamId = gamesheetTeamId;
     }
 }
+
