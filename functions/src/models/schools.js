@@ -65,6 +65,11 @@ export class Schools {
         return this.data.find(school => school.school_name === name);
     }
 
+    // Get school data by ID.
+    static getSchoolById(id) {
+        return this.data.find(school => school.id === id);
+    }
+
     // Optionally, get all school records.
     static getAllSchools() {
         return this.data;
