@@ -521,7 +521,6 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
                             awayScore: awayScore,
                             gameDate: new Date(date),
                             gameTime: time,
-                            sportsId: sport_id,
                             sportsName: sport[0],
                             term: sport[1],
                             leagueCode: leagueNum,
@@ -597,12 +596,54 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
         console.log('Unique Game IDs:', gameIds);
 
         if (gameIds && gameIds.length > 0) {
+            // Get games from GameSheet
             const games = await parseGameSheetGames(seasonCode, gameIds, localBrowser);
-            return games;
+
+            if (games && games.length > 0) {
+                // Get sport information from current context
+                const sportId = await getSportID(leagueNum);
+
+                // Enhance each game with the missing data
+                const enhancedGames = await Promise.all(games.map(async game => {
+                    // Find schools by matching names
+                    const homeSchoolId = await getSchoolIDName(game.homeTeam);
+                    const awaySchoolId = await getSchoolIDName(game.awayTeam);
+
+                    // Get school objects
+                    const homeSchool = Schools.getSchoolById(homeSchoolId);
+                    const awaySchool = Schools.getSchoolById(awaySchoolId);
+
+                    // Update game with additional information
+                    game.sportsId = sportId;
+                    game.sportsName = sport[0];  // Sport name
+                    game.term = sport[1];        // Term (Fall/Winter/Spring)
+                    game.leagueCode = leagueNum; // League code
+                    game.gsSeasonCode = seasonCode;
+                    game.gsDivisionCode = divisionId;
+
+                    // Convert Date to YYYY_MM_DD format & Generate a unique game code
+                    const dateStr = game.gameDate.toISOString().split('T')[0].replace(/-/g, '_');
+                    game.gameCode = `G_${homeSchoolId}_${awaySchoolId}_${dateStr}_${sportId}`;
+
+                    // Add school information if found
+                    if (homeSchool) {
+                        game.homeAbbr = homeSchool.abbreviation;
+                        game.homeLogo = homeSchool.logo_dir;
+                    }
+
+                    if (awaySchool) {
+                        game.awayAbbr = awaySchool.abbreviation;
+                        game.awayLogo = awaySchool.logo_dir;
+                    }
+
+                    return game.toMap();  // Convert to map format for consistency
+                }));
+
+                console.log(enhancedGames)
+
+                return enhancedGames.filter(item => item !== undefined);
+            }
         }
-
-        //for each game id, get the game data
-
 
         return []
     } finally {

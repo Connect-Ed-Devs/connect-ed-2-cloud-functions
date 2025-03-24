@@ -11,7 +11,6 @@ export class BaseGame {
     gameTime = '',
     homeScore = '',
     awayScore = '',
-    sportsId = 0,
     sportsName = '',
     term = '',
     leagueCode = '',
@@ -27,7 +26,6 @@ export class BaseGame {
     this.gameTime = gameTime;
     this.homeScore = homeScore;
     this.awayScore = awayScore;
-    this.sportsId = sportsId;
     this.sportsName = sportsName;
     this.term = term;
     this.leagueCode = leagueCode;
@@ -46,67 +44,12 @@ export class BaseGame {
       game_time: this.gameTime,
       home_score: this.homeScore,
       away_score: this.awayScore,
-      sports_id: this.sportsId,
       sports_name: this.sportsName,
       term: this.term,
       league_code: this.leagueCode,
       game_code: this.gameCode
+
     };
-  }
-}
-
-// Derived class for Soccer
-export class SoccerGame extends BaseGame {
-  constructor({
-                // Base fields
-                homeTeam,
-                homeAbbr,
-                homeLogo,
-                awayTeam,
-                awayAbbr,
-                awayLogo,
-                gameDate,
-                gameTime,
-                homeScore,
-                awayScore,
-                sportsId,
-                sportsName,
-                term,
-                leagueCode,
-                gameCode,
-
-                // Soccer-specific fields
-                gameType,
-                goals,
-                isHomeGame,
-                link,
-
-
-              }) {
-    // Pass base fields to parent constructor
-    super({
-      homeTeam,
-      homeAbbr,
-      homeLogo,
-      awayTeam,
-      awayAbbr,
-      awayLogo,
-      gameDate,
-      gameTime,
-      homeScore,
-      awayScore,
-      sportsId,
-      sportsName,
-      term,
-      leagueCode,
-      gameCode
-    });
-
-    // Set extra soccer fields
-    this.gameType = gameType;
-    this.goals = goals;
-    this.isHomeGame = isHomeGame;
-    this.link = link;
   }
 }
 
@@ -123,13 +66,15 @@ export class gamesheetGame extends BaseGame {
                 gameTime,
                 homeScore,
                 awayScore,
-                sportsId,
                 sportsName,
                 term,
                 leagueCode,
                 gameCode,
+                gameId,
 
-                // Soccer-specific fields
+                // GameSheet-specific fields
+                gsSeasonCode,
+                gsDivisionCode,
                 gameType,
                 goals,
                 link,
@@ -148,16 +93,31 @@ export class gamesheetGame extends BaseGame {
       gameTime,
       homeScore,
       awayScore,
-      sportsId,
       sportsName,
       term,
       leagueCode,
       gameCode
     });
 
-    // Set extra soccer fields
+    // Set extra GameSheet fields
+    this.gsSeasonCode = gsSeasonCode;
+    this.gsDivisionCode = gsDivisionCode;
+    this.gameId = gameId;
     this.gameType = gameType;
     this.goals = goals;
     this.link = link;
   }
+
+    toMap() {
+        const baseMap = super.toMap();
+        return {
+            ...baseMap,
+            game_id: this.gameId,
+            game_type: this.gameType,
+            goals: this.goals?.map(goal => goal.toMap ? goal.toMap() : goal),
+            link: this.link,
+            gs_season_code: this.gsSeasonCode,
+            gs_division_code: this.gsDivisionCode
+        };
+    }
 }
