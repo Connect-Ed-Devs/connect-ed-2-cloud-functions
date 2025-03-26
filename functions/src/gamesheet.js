@@ -322,6 +322,8 @@ export async function parseGameSheetGames(seasonCode, gameIds, browser) {
         await page.waitForSelector('.sc-eDHQDy.jYdCkq.boxscore-game-score.w-full.items-center.flex.flex-row.justify-center.gap-4', {timeout: 20000});
 
         let gameData = await page.evaluate(() => {
+            // Get the game status, lowercase it
+            const gameStatus = document.querySelector('[data-testid="boxscore-game-status-bar"]')   ?.textContent.toLowerCase() || '';
 
             // Extract the game data from the page
             const gameEl = document.querySelector('[data-testid="boxscore-container"]');
@@ -376,6 +378,12 @@ export async function parseGameSheetGames(seasonCode, gameIds, browser) {
 
         //Extract goals
         const goalsData = await page.evaluate(() => {
+            const gameStatus = document.querySelector('[data-testid="boxscore-game-status-bar"]')?.textContent.toLowerCase() || '';
+            // If the game is scheduled, return an empty array for goals.
+            if (gameStatus.includes('scheduled')) {
+                return [];
+            }
+
             // Function to extract the name from the full text
             function extractName(fullText) {
                 // Remove the leading '#' and number, then remove trailing ' (1)' or similar.
