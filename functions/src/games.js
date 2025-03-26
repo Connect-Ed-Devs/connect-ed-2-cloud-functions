@@ -572,7 +572,6 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
 
     // If it's a gamesheet league, get the team code from firebase standings and determine by name "Appleby College"
     const applebyTeamCode = await getApplebyTeamCode(leagueNum);
-    console.log(applebyTeamCode)
 
     //If it’s a GameSheet league, check if a browser was provided
     let localBrowser = browser;
@@ -589,8 +588,6 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
     }
 
     try {
-        console.log("here")
-
         //get gameids from gamesheet
         const gameIds = await parseGameIDs(seasonCode, divisionId, applebyTeamCode, localBrowser);
         console.log('Unique Game IDs:', gameIds);
