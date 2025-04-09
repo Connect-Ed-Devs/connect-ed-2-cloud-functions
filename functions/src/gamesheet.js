@@ -300,198 +300,235 @@ export async function parseGameSheetGames(seasonCode, gameIds, browser) {
 
         // Loop through each gameId and visit the corresponding page
         let games = [];
-        /*
+
+        page.on('console', (msg) => {
+            console.log('PAGE LOG:', msg.text());
+        });
+
         for (const gameId of gameIds) {
             const url = `https://gamesheetstats.com/seasons/${seasonCode}/games/${gameId}`;
             console.log("Visiting:", url);
             await page.goto(url, {waitUntil: "networkidle2"});
 
             // Wait for the scores element to appear
-            await page.waitForSelector('.sc-eDHQDy.jYdCkq.boxscore-game-score.w-full.items-center.flex.flex-row.justify-center.gap-4', {timeout: 20000});
+            await page.waitForSelector('.sc-eDHQDy.jYdCkq.boxscore-game-score.w-full.items-center.flex.flex-row.justify-center.gap-4', {timeout: 30000});
 
-            const content = await page.evaluate(() => document.body.innerHTML);
-            console.log(content);
+            let gameData = await page.evaluate(() => {
 
-        }*/
+                // Extract the game data from the page
+                const gameEl = document.querySelector('[data-testid="boxscore-container"]');
 
-        const url = `https://gamesheetstats.com/seasons/${seasonCode}/games/${gameIds[0]}`;
-        console.log("Visiting:", url);
-        await page.goto(url, {waitUntil: "networkidle2"});
+                //Check if the game is scheduled
+                const gameStatus = gameEl.querySelector('[data-testid="game-status-text"]')?.textContent.toLowerCase() || '';
 
-        // Wait for the scores element to appear
-        await page.waitForSelector('.sc-eDHQDy.jYdCkq.boxscore-game-score.w-full.items-center.flex.flex-row.justify-center.gap-4', {timeout: 20000});
+                //For teams:
+                const homeTeam = gameEl.querySelector('[data-testid="home-title"]')?.textContent || '';
+                const awayTeam = gameEl.querySelector('[data-testid="visitor-title"]')?.textContent || '';
 
-        let gameData = await page.evaluate(() => {
-            // Get the game status, lowercase it
-            const gameStatus = document.querySelector('[data-testid="boxscore-game-status-bar"]')   ?.textContent.toLowerCase() || '';
+                // For scores:
+                let homeScore = gameEl.querySelector('[data-testid="home-score"]')?.textContent.split('SOG:')[0].trim()  || '';
+                let awayScore = gameEl.querySelector('[data-testid="visitor-score"]')?.textContent.split('SOG:')[0].trim() || '';
 
-            // Extract the game data from the page
-            const gameEl = document.querySelector('[data-testid="boxscore-container"]');
+                // If the game is scheduled, leave scores as null.
+                if (gameStatus.includes('scheduled')) {
+                    homeScore = "";
+                    awayScore = "";
+                }
 
-            //For teams:
-            const homeTeam = gameEl.querySelector('[data-testid="home-title"]')?.textContent || '';
-            const awayTeam = gameEl.querySelector('[data-testid="visitor-title"]')?.textContent || '';
+                // For game type:
+                const gameType = gameEl.querySelector('[data-testid="game-type"]')?.textContent || '';
+                //For date and time:
+                const gameDateTime = gameEl.querySelector('[data-testid="game-date-time"]')?.textContent || '';
 
-            // For scores:
-            const homeScore = gameEl.querySelector('[data-testid="home-score"]')?.textContent.split('SOG:')[0].trim()  || '';
-            const awayScore = gameEl.querySelector('[data-testid="visitor-score"]')?.textContent.split('SOG:')[0].trim() || '';
+                // Split the string on ', ' to separate the parts
+                const parts = gameDateTime.split(', '); // ["Sep 25", "2024", "4:02 PM"]
 
-            // For game type:
-            const gameType = gameEl.querySelector('[data-testid="game-type"]')?.textContent || '';
-            //For date and time:
-            const gameDateTime = gameEl.querySelector('[data-testid="game-date-time"]')?.textContent || '';
+                // Combine the first two parts to form the date portion
+                const datePortion = `${parts[0]}, ${parts[1]}`; // "Sep 25, 2024"
 
-            // Split the string on ', ' to separate the parts
-            const parts = gameDateTime.split(', '); // ["Sep 25", "2024", "4:02 PM"]
+                // The time remains as a string
+                const timePortion = parts[2]; // "4:02 PM"
 
-            // Combine the first two parts to form the date portion
-            const datePortion = `${parts[0]}, ${parts[1]}`; // "Sep 25, 2024"
-
-            // The time remains as a string
-            const timePortion = parts[2]; // "4:02 PM"
-
-            // Create a Date object from the date portion (time will default to midnight)
-            const gameDate = new Date(datePortion);
-
-            console.log(gameDate.toDateString());    // For example: Wed Sep 25 2024 00:00:00 ...
-            console.log(timePortion); // "4:02 PM"
+                // Create a Date object from the date portion (time will default to midnight)
+                const gameDate = new Date(datePortion);
 
 
-            return {
-                homeScore,
-                awayScore,
-                homeTeam,
-                awayTeam,
-                gameDateTime,
-                gameDate,
-                gameType,
-                datePortion,
-                timePortion,
+                return {
+                    homeScore,
+                    awayScore,
+                    homeTeam,
+                    awayTeam,
+                    gameStatus,
+                    gameDateTime,
+                    gameDate,
+                    gameType,
+                    datePortion,
+                    timePortion,
 
-            };
+                };
 
-        });
-        console.log(gameData);
-        // Create the Date object in the Node.js context
-        const gameDate = new Date(gameData.datePortion + ' ' + gameData.timePortion);
-        console.log("Date created in Node context:", gameDate.toString());
-
-        //Extract goals
-        const goalsData = await page.evaluate(() => {
-            const gameStatus = document.querySelector('[data-testid="boxscore-game-status-bar"]')?.textContent.toLowerCase() || '';
-            // If the game is scheduled, return an empty array for goals.
-            if (gameStatus.includes('scheduled')) {
-                return [];
-            }
-
-            // Function to extract the name from the full text
-            function extractName(fullText) {
-                // Remove the leading '#' and number, then remove trailing ' (1)' or similar.
-                return fullText
-                    .replace(/^#\d+\s+/, '')  // remove leading number with '#' and spaces
-                    .replace(/\s+\(\d+\)$/, '') // remove trailing space, parenthesis, and number
-                    .trim();
-            }
-
-            // Array to hold raw goal objects.
-            const goals = [];
-
-            // Select each period container (e.g. "goal-by-period-1ST Half" or "goal-by-period-1ST Period")
-            const periodContainers = Array.from(
-                document.querySelectorAll('[data-testid^="goal-by-period-"]')
-            );
-
-            periodContainers.forEach(container => {
-                // Extract period label. It might be found inside an element with data-testid like:
-                // "goal-period-header-1ST Half" or "goal-period-header-1ST Period"
-                const periodHeaderEl = container.querySelector('[data-testid^="goal-period-header-"]');
-                // If not found, you might also consider using the container's own data-testid.
-                let period = periodHeaderEl ? periodHeaderEl.innerText.trim() : '';
-
-                // Select each goal event inside this container.
-                const goalNodes = Array.from(
-                    container.querySelectorAll('[data-testid^="goal-event-"]')
-                );
-
-                goalNodes.forEach(goalNode => {
-                    // Extract the minute scored from the time element.
-                    const timeEl = goalNode.querySelector('[data-testid^="goal-event-time-"] span');
-                    const minuteScored = timeEl ? timeEl.innerText.trim() : '';
-
-                    // Extract the team name from the goal data team element.
-                    const teamEl = goalNode.querySelector('[data-testid^="goal-data-team-"] span');
-                    const teamName = teamEl ? teamEl.innerText.trim() : '';
-
-                    // Extract the scorer from the goal data title element.
-                    const scorerEl = goalNode.querySelector('[data-testid^="goal-data-title-"] span');
-                    const scorer = scorerEl ? scorerEl.innerText.trim() : '';
-                    const scorerName = extractName(scorer);
-
-                    // Extract the assist information (if any).
-                    const assistEl = goalNode.querySelector('[data-testid^="goal-data-assists-"]');
-                    let assister = assistEl ? assistEl.innerText.trim() : '';
-
-                    // For hockey, you might have a second assist (preAssister) – if not present, leave it blank.
-                    // You could try to see if assistEl contains multiple pieces of text and split them.
-                    let preAssister = '';
-                    if (assister.includes(',')) {
-                        // For example, if two assists are separated by a comma.
-                        const assistsArray = assister.split(',').map(item => item.trim());
-                        // Assign first as "assister" and second as "preAssister"
-                        assister = assistsArray[0];
-                        preAssister = assistsArray[1] || '';
-                    }
-
-                    // Only push if we have meaningful data in at least one of the fields
-                    if (teamName && scorerName) {
-                        goals.push({
-                            teamName,
-                            minuteScored,
-                            period,  // Make sure 'period' is defined elsewhere in your code
-                            scorer: scorerName,
-                            assister,
-                            preAssister
-                        });
-                    }
-                });
             });
 
-            return goals;
-        });
+            // Create the Date object in the Node.js context
+            const gameDate = new Date(gameData.datePortion + ' ' + gameData.timePortion);
 
-        const goalObjects = goalsData.map(goalData => new Goal(goalData));
+            let goalObjects = [];
 
-        // Create game object with available data, null for fields to be filled later
-        const game = new gamesheetGame({
-            // Data available now
-            homeTeam: gameData.homeTeam,
-            awayTeam: gameData.awayTeam,
-            homeScore: gameData.homeScore,
-            awayScore: gameData.awayScore,
-            gameDate: gameDate,
-            gameTime: gameData.timePortion,
-            gameId: gameIds[0], // Assuming gameIds[0] is the game code
+            // Only extract goals if the game is not scheduled.
+            if (gameData.gameStatus.includes('scheduled')) {
+                console.log("Game is scheduled, skipping goal extraction.");
+            } else {
+                // Check if the game is goalless.
+                if (gameData.homeScore === '0' && gameData.awayScore === '0') {
+                    console.log("Game is goalless, skipping goal extraction.");
+                    // goalObjects remains an empty array.
+                } else {
+                    // Wait for goal containers to appear with a maximum timeout.
+                    await page.waitForSelector('[data-testid^="goal-event-"]', {timeout: 30000});
 
-            // Fields to be filled later - set to null/empty
-            homeAbbr: null,
-            homeLogo: null,
-            awayAbbr: null,
-            awayLogo: null,
-            sportsName: null,
-            term: null,
-            leagueCode: null,
-            gsSeasonCode: null,
-            gsDivisionCode: null,
-            gameCode: null,
 
-            // GameSheet-specific fields
-            gameType: gameData.gameType,
-            goals: goalObjects,
-            link: `https://gamesheetstats.com/seasons/${seasonCode}/games/${gameIds[0]}?configuration%5Bprimary-colour%5D=FCFFF9&configuration%5Bsecondary-colour%5D=034265`
-        });
+                    const test = await page.evaluate(() => {            // Extract and print entire innerHTML of each period container
+                        const periodContainers = Array.from(document.querySelectorAll('[data-testid^="goal-by-period-"]'));
+                        if (periodContainers.length) {
+                            periodContainers.forEach((container, index) => {
+                                console.log(`Period Container ${index}:`, container.innerHTML);
+                            });
+                        } else {
+                            console.log("No period containers found.");
+                        }
+                    });
 
-        games.push(game);
-        console.log("Game object created:", game);
+                    //Extract goals
+                    const goalsData = await page.evaluate(() => {
+                        const gameStatus = document.querySelector('[data-testid="boxscore-game-status-bar"]')?.textContent.toLowerCase() || '';
+
+                        // If the game is scheduled, return an empty array for goals.
+                        if (gameStatus.includes('scheduled')) {
+                            console.log("Game is scheduled, no goals to extract.");
+                            return [];
+                        }
+
+                        // Function to extract the name from the full text
+                        function extractName(fullText) {
+                            // Remove the leading '#' and number, then remove trailing ' (1)' or similar.
+                            return fullText
+                                .replace(/^#\d+\s+/, '')  // remove leading number with '#' and spaces
+                                .replace(/\s+\(\d+\)$/, '') // remove trailing space, parenthesis, and number
+                                .trim();
+                        }
+
+                        // Array to hold raw goal objects.
+                        const goals = [];
+
+                        // Select each period container (e.g. "goal-by-period-1ST Half" or "goal-by-period-1ST Period")
+                        const periodContainers = Array.from(
+                            document.querySelectorAll('[data-testid^="goal-by-period-"]')
+                        );
+                        if (!periodContainers.length) {
+                            console.log("No goal containers found. Goals extraction skipped.");
+                            return [];
+                        }
+
+                        periodContainers.forEach(container => {
+                            // Extract period label. It might be found inside an element with data-testid like:
+                            // "goal-period-header-1ST Half" or "goal-period-header-1ST Period"
+                            const periodHeaderEl = container.querySelector('[data-testid^="goal-period-header-"]');
+                            // If not found, you might also consider using the container's own data-testid.
+                            let period = periodHeaderEl ? periodHeaderEl.innerText.trim() : '';
+
+                            // Select each goal event inside this container.
+                            const goalNodes = Array.from(
+                                container.querySelectorAll('[data-testid^="goal-event-"]')
+                            );
+
+                            goalNodes.forEach(goalNode => {
+                                // Extract the minute scored from the time element.
+                                const timeEl = goalNode.querySelector('[data-testid^="goal-event-time-"] span');
+                                const minuteScored = timeEl ? timeEl.innerText.trim() : '';
+                                console.log(minuteScored);
+
+                                // Extract the team name from the goal data team element.
+                                const teamEl = goalNode.querySelector('[data-testid^="goal-data-team-"] span');
+                                const teamName = teamEl ? teamEl.innerText.trim() : '';
+                                console.log(teamName);
+
+                                // Extract the scorer from the goal data title element.
+                                const scorerEl = goalNode.querySelector('[data-testid^="goal-data-title-"] span');
+                                const scorer = scorerEl ? scorerEl.innerText.trim() : '';
+                                const scorerName = extractName(scorer);
+                                console.log(scorerName);
+
+                                // Extract the assist information (if any).
+                                const assistEl = goalNode.querySelector('[data-testid^="goal-data-assists-"]');
+                                let assistText = assistEl ? assistEl.innerText.trim() : '';
+                                let assister = '';
+                                let preAssister = '';
+
+                                // If there is more than one "#" in the assistText then split assists
+                                if ((assistText.match(/#/g) || []).length > 1) {
+                                    // Split the string by the "#digits" pattern
+                                    const assistParts = assistText.split(/#\d+\s+/).filter(item => item.trim() !== '');
+                                    assister = extractName(assistParts[0]);
+                                    preAssister = assistParts.length > 1 ? extractName(assistParts[1]) : '';
+                                } else {
+                                    // Only a single assist is present
+                                    assister = extractName(assistText);
+                                }
+
+                                // Only push if we have meaningful data in at least one of the fields
+                                if (teamName && scorerName) {
+                                    goals.push({
+                                        teamName,
+                                        minuteScored,
+                                        period,  // Make sure 'period' is defined elsewhere in your code
+                                        scorer: scorerName,
+                                        assister,
+                                        preAssister
+                                    });
+                                }
+                            });
+                        });
+
+                        return goals;
+                    });
+
+                    goalObjects = goalsData.map(goalData => new Goal(goalData));
+
+                    console.log(goalObjects);
+                }
+            }
+
+            // Create game object with available data, null for fields to be filled later
+            const game = new gamesheetGame({
+                // Data available now
+                homeTeam: gameData.homeTeam,
+                awayTeam: gameData.awayTeam,
+                homeScore: gameData.homeScore,
+                awayScore: gameData.awayScore,
+                gameDate: gameDate,
+                gameTime: gameData.timePortion,
+                gameId: gameId,
+
+                // Fields to be filled later - set to null/empty
+                homeAbbr: null,
+                homeLogo: null,
+                awayAbbr: null,
+                awayLogo: null,
+                sportsName: null,
+                term: null,
+                leagueCode: null,
+                gsSeasonCode: null,
+                gsDivisionCode: null,
+                gameCode: null,
+
+                // GameSheet-specific fields
+                gameType: gameData.gameType,
+                goals: goalObjects,
+                link: `https://gamesheetstats.com/seasons/${seasonCode}/games/${gameId}?configuration%5Bprimary-colour%5D=FCFFF9&configuration%5Bsecondary-colour%5D=034265`
+            });
+
+            games.push(game);
+        }
 
         return games;
 
