@@ -85,13 +85,35 @@ export async function setStandings(leagueCode, usesGamesheet, browser) {
  * Scrapes game data and writes/updates each document in the "Games" collection.
  */
 export async function setGames(leagueCode, usesGamesheet, browser) {
-    const games = await parseGames(leagueCode, usesGamesheet, browser);
-    const batch = db.batch();
-    games.forEach((game) => {
-        const docRef = db.collection("Games").doc(game.game_code);
-        batch.set(docRef, game, { merge: true });
-    });
-    await batch.commit();
+    try {
+        const games = await parseGames(leagueCode, usesGamesheet, browser);
+        const batch = db.batch();
+
+        games.forEach(game => {
+            // Convert game instance to a plain object.
+            const gameData = typeof game.toMap === 'function' ? game.toMap() : { ...game };
+
+            // Extract goals and remove them from the game data.
+            const goals = Array.isArray(gameData.goals) ? gameData.goals : [];
+            delete gameData.goals;
+
+            // Create a reference for the game document.
+            const gameDocRef = db.collection("Games").doc(gameData.game_code);
+            batch.set(gameDocRef, gameData, { merge: true });
+
+            // For each goal, convert it to an object and add it as a document in the 'goals' subcollection.
+            goals.forEach((goal, index) => {
+                const goalData = typeof goal.toMap === 'function' ? goal.toMap() : { ...goal };
+                const goalDocRef = gameDocRef.collection("goals").doc(`goal_${index}`);
+                batch.set(goalDocRef, goalData, { merge: true });
+            });
+        });
+        await batch.commit();
+
+    } catch (error) {
+        console.error("Error in setGames:", error);
+        throw error; // Propagate error to be caught in testGamesUpload
+    }
 }
 
 /**
