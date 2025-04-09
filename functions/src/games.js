@@ -465,6 +465,7 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
                 headers: { "content-type": "application/x-www-form-urlencoded" },
                 data: qs.stringify({ txtleague: `${leagueNum}` }),
             });
+
             const html = response.data;
             const $ = cheerio.load(html);
             const sport_id = await getSportID(leagueNum);
@@ -542,6 +543,7 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
         return parseCISAAGames(leagueNum);
     }
 
+
     // 1) If it’s a GameSheet league, get the season code and division ID from the iframe URL
     const response = await axios.request({
         baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
@@ -569,6 +571,7 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
 
     const seasonCode = seasonCodeMatch[1];
     const divisionId = divisionMatch[1];
+
 
     // If it's a gamesheet league, get the team code from firebase standings and determine by name "Appleby College"
     const applebyTeamCode = await getApplebyTeamCode(leagueNum);
