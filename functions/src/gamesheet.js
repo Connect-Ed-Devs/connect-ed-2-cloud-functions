@@ -2,6 +2,7 @@ import puppeteer from "puppeteer";
 import { SoccerStandings, HockeyStandings } from "./models/StandingsClasses.js";
 import {gamesheetGame} from "./models/GameClasses.js";
 import {Goal} from "./models/goal.js";
+import {hockeyPlayer, hockeyGK, soccerPlayer, soccerGK} from "./models/rosterClasses.js";
 
 export async function parseGameSheetSoccerStandings(seasonCode, divisionId, browser) {
     let page;
@@ -558,43 +559,116 @@ export async function parseGameSheetSoccerRoster(seasonCode, gameIds, teamCode, 
         // Wait for the table element to appear
         await page.waitForSelector('.sc-VILhF.jDQCGM.gs-table', {timeout: 30000});
 
+        // 1) grab just the number/name/link/position
         const roster = await page.evaluate(() => {
-            const roster = [];
-            const rows = document.querySelectorAll(".column.number .row-header");
-            console.log(rows);
-            rows.forEach((_, idx) => {
-                const getValue = (cls) => {
-                    const el = document.querySelector(`.column.${cls} .row-header.row-${idx} .data`);
-                    return el ? el.innerText.trim() : null;
-                };
+            const out = [];
+            const tables = document.querySelectorAll('.sc-VILhF.jDQCGM.gs-table');
+            tables.forEach((table, tableIndex) => {
+                const rows = table.querySelectorAll('.column.number .row-header');
+                rows.forEach((_, idx) => {
+                    const getValue = cls =>
+                        table.querySelector(`.column.${cls} .row-${idx} .data`)?.innerText.trim() ?? null;
 
-                let name = null, link = null;
-                const a = document.querySelector(`.column.name .row-header.row-${idx} .data a`);
-                if (a) { name = a.innerText.trim(); link = a.href; }
-
-                roster.push({
-                    number: getValue("number"),
-                    position: getValue("position"),
-                    name,
-                    link
+                    const a = table.querySelector(`.column.name .row-${idx} .data a`);
+                    out.push({
+                        number:   getValue('number'),
+                        position: tableIndex === 1 ? 'GK' : getValue('position'),
+                        name:     a?.innerText.trim() ?? null,
+                        link:     a ? a.href : null
+                    });
                 });
             });
-            return roster;
+            return out.filter(r => r.name);
         });
 
-        console.log("Found roster entries:", roster);
-/*
-        // now, for example, visit each player’s page and scrape something
-        for (let player of roster) {
+        // 2) now visit each player page and pull the TOTAL row
+        const players = [];
+        for (let row of roster) {
             const playerPage = await browser.newPage();
-            const playerUrl = new URL(player.href, baseUrl).href;
-            console.log("Visiting player:", player.name, playerUrl);
-            await playerPage.goto(playerUrl, { waitUntil: "networkidle2" });
-            // … do whatever you need on each playerPage …
+            await playerPage.goto(row.link, { waitUntil: 'networkidle2' });
+
+            const stats = await playerPage.evaluate(() => {
+                // find the index of the “Total” row
+                const seasons = Array.from(
+                    document.querySelectorAll('.column.season .row-header .data span')
+                );
+                const ti = seasons.findIndex(s => s.textContent.trim() === 'Total');
+                if (ti < 0) return null;
+
+                // helper to pull any column
+                const getVal = cls =>
+                    document
+                        .querySelector(`.column.${cls} .row-${ti} .data span`)
+                        ?.textContent.trim() ?? null;
+
+                return {
+                    gp:  getVal('gp'),
+                    g:   getVal('g'),
+                    a:   getVal('a'),
+                    pts: getVal('pts'),
+                    yc:  getVal('yc'),    // yellow cards
+                    rc:  getVal('rc'),    // red cards
+
+                    // goalie‐only stats (we’ll ignore them on skaters)
+                    gs:   getVal('gs'),
+                    sa:   getVal('sa'),
+                    ga:   getVal('ga'),
+                    gaa:  getVal('gaa'),  // already on page
+                    svpct:getVal('svpct'),
+                    so:   getVal('so'),
+                    min:  getVal('min'),
+                };
+            });
+
             await playerPage.close();
+            if (!stats) continue;
+
+            // pull numeric ID out of the URL
+            const m = row.link.match(/\/(?:players|goalies)\/(\d+)/);
+            const playerId = m ? m[1] : '';
+
+            // common base fields
+            const base = {
+                teamName:       'Appleby College',       // or pass in dynamically
+                playerId,
+                seasonCode,
+                jerseyNumber:   row.number,
+                playerName:     row.name,
+                playerPosition: row.position,
+                gamesPlayed:    parseInt(stats.gp, 10)   || 0,
+                goals:          parseInt(stats.g, 10)    || 0,
+                assists:        parseInt(stats.a, 10)    || 0,
+                link:           row.link
+            };
+
+            if (row.position === 'GK') {
+                // goalie
+                players.push(new soccerGK({
+                    ...base,
+                    shotsAgainst:          parseInt(stats.sa, 10)    || 0,
+                    goalsAgainst:          parseInt(stats.ga, 10)    || 0,
+                    goalsAgainstAverage:   parseFloat(stats.gaa)     || 0,
+                    shutouts:              parseInt(stats.so, 10)    || 0,
+                    minutesPlayed:         parseInt(stats.min, 10)   || 0,
+                    // you can also carry forwards YC/RC if desired:
+                    yellowCards:           parseInt(stats.yc, 10)    || 0,
+                    redCards:              parseInt(stats.rc, 10)    || 0,
+                }));
+            } else {
+                // skater
+                players.push(new soccerPlayer({
+                    ...base,
+                    yellowCards:    parseInt(stats.yc, 10)  || 0,
+                    redCards:       parseInt(stats.rc, 10)  || 0,
+                    // if you like, you can also carry total pts in a custom field:
+                    // points:      parseInt(stats.pts, 10) || 0,
+                }));
+            }
         }
-*/
-        return roster;
+
+        console.log(players)
+        return players;
+
     } catch (err) {
         console.error("Error in parseGameSheetRoster:", err);
         return [];
@@ -619,54 +693,109 @@ export async function parseGameSheetHockeyRoster(seasonCode, gameIds, teamCode, 
         // Wait for the table element to appear
         await page.waitForSelector('.sc-VILhF.jDQCGM.gs-table', {timeout: 30000});
 
+        // 1) grab just the number/name/link/position
         const roster = await page.evaluate(() => {
             const out = [];
-
-            // 1st gs-table = skaters, 2nd gs-table = goalies
             const tables = document.querySelectorAll('.sc-VILhF.jDQCGM.gs-table');
-
             tables.forEach((table, tableIndex) => {
                 const rows = table.querySelectorAll('.column.number .row-header');
-
                 rows.forEach((_, idx) => {
-                    // scoped helper, looks only inside this table
-                    const getValue = cls => {
-                        const el = table.querySelector(`.column.${cls} .row-${idx} .data`);
-                        return el ? el.innerText.trim() : null;
-                    };
+                    const getValue = cls =>
+                        table.querySelector(`.column.${cls} .row-${idx} .data`)?.innerText.trim() ?? null;
 
                     const a = table.querySelector(`.column.name .row-${idx} .data a`);
-                    const name = a?.innerText.trim() ?? null;
-                    const link = a?.href            ?? null;
-
                     out.push({
                         number:   getValue('number'),
-                        // if we're in the 2nd table (goalies), force "GK"
-                        position: tableIndex === 1
-                            ? 'GK'
-                            : getValue('position'),
-                        name,
-                        link
+                        position: tableIndex === 1 ? 'GK' : getValue('position'),
+                        name:     a?.innerText.trim() ?? null,
+                        link:     a ? a.href : null
                     });
                 });
             });
-
             return out.filter(r => r.name);
         });
 
-        console.log("Found roster entries:", roster);
-        /*
-                // now, for example, visit each player’s page and scrape something
-                for (let player of roster) {
-                    const playerPage = await browser.newPage();
-                    const playerUrl = new URL(player.href, baseUrl).href;
-                    console.log("Visiting player:", player.name, playerUrl);
-                    await playerPage.goto(playerUrl, { waitUntil: "networkidle2" });
-                    // … do whatever you need on each playerPage …
-                    await playerPage.close();
-                }
-        */
-        return roster;
+        // 2) now visit each player page and pull the TOTAL row
+        const players = [];
+        for (let row of roster) {
+            const playerPage = await browser.newPage();
+            await playerPage.goto(row.link, { waitUntil: 'networkidle2' });
+
+            const stats = await playerPage.evaluate(() => {
+                // find which row is the “Total” row
+                const seasons = Array.from(
+                    document.querySelectorAll('.column.season .row-header .data span')
+                );
+                const ti = seasons.findIndex(s => s.textContent.trim() === 'Total');
+                if (ti < 0) return null;
+
+                const getVal = cls =>
+                    document.querySelector(`.column.${cls} .row-${ti} .data span`)?.textContent.trim() ?? null;
+
+                // compute our GAA:
+                const gaNum  = parseFloat(getVal('ga'))  || 0;
+                const minNum = parseFloat(getVal('min')) || 0;
+                const gaaCalc = minNum > 0
+                    ? ((gaNum / minNum) * 60).toFixed(2)
+                    : null;
+
+                return {
+                    gp:  getVal('gp'),
+                    g:   getVal('g'),
+                    a:   getVal('a'),
+                    pts: getVal('pts'),
+                    pim: getVal('pim'),
+                    sa:  getVal('sa'),
+                    ga:  getVal('ga'),
+                    gaa: gaaCalc,
+                    so:  getVal('so'),
+                    min: getVal('min'),
+                };
+            });
+
+            await playerPage.close();
+            if (!stats) continue;
+
+            // extract numeric ID from the URL (players vs goalies)
+            const m = row.link.match(/\/(?:players|goalies)\/(\d+)/);
+            const playerId = m ? m[1] : '';
+
+            // common BaseRoster fields
+            const base = {
+                teamName:      'Appleby College',           // you can fill this from your context
+                playerId,
+                seasonCode,
+                jerseyNumber:  row.number,
+                playerName:    row.name,
+                playerPosition:row.position,
+                gamesPlayed:   parseInt(stats.gp, 10)   || 0,
+                goals:         parseInt(stats.g, 10)    || 0,
+                assists:       parseInt(stats.a, 10)    || 0,
+                link:          row.link
+            };
+
+            if (row.position === 'GK') {
+                // goalie
+                players.push(new hockeyGK({
+                    ...base,
+                    shotsAgainst:          parseInt(stats.sa, 10)  || 0,
+                    goalsAgainst:          parseInt(stats.ga, 10)  || 0,
+                    goalsAgainstAverage:   parseFloat(stats.gaa)   || 0,
+                    shutouts:              parseInt(stats.so, 10)  || 0,
+                    minutesPlayed:         parseInt(stats.min, 10) || 0
+                }));
+            } else {
+                // skater
+                players.push(new hockeyPlayer({
+                    ...base,
+                    points:         parseInt(stats.pts, 10) || 0,
+                    penaltyMinutes: parseInt(stats.pim, 10) || 0
+                }));
+            }
+        }
+
+        return players;
+
     } catch (err) {
         console.error("Error in parseGameSheetRoster:", err);
         return [];
