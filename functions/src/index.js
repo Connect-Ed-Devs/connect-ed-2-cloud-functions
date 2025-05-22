@@ -9,6 +9,8 @@ import {
   initializeFirebase, getStandings
 } from './database.js';
 import { Sports } from './models/sports.js';
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import * as logger from "firebase-functions/logger";
 
 // Initialize Firebase (this should happen only once)
 initializeFirebase();
@@ -153,3 +155,37 @@ async function runAllTests() {
 runAllTests().catch(error => {
   console.error("Test execution failed:", error);
 });
+
+// Scheduled function to update games and standings daily
+export const scheduledUpdateGamesStandings = onSchedule("every day 00:00", async (event) => {
+  logger.info("Scheduled updateGamesStandings started", { event });
+  try {
+    await updateGamesStandings();
+    logger.info("Scheduled updateGamesStandings completed successfully");
+  } catch (error) {
+    logger.error("Error in scheduledUpdateGamesStandings:", error);
+  }
+});
+
+// Scheduled function to set all data weekly (e.g., every Sunday at 1 AM)
+export const scheduledSetAll = onSchedule("every sunday 01:00", async (event) => {
+  logger.info("Scheduled setAll started", { event });
+  try {
+    await setAll();
+    logger.info("Scheduled setAll completed successfully");
+  } catch (error) {
+    logger.error("Error in scheduled setAll:", error);
+  }
+});
+
+// Scheduled function to set sports data monthly (e.g., on the 1st of every month at 2 AM)
+export const scheduledSetSports = onSchedule("1 of month 02:00", async (event) => {
+  logger.info("Scheduled setSports started", { event });
+  try {
+    await setSports();
+    logger.info("Scheduled setSports completed successfully");
+  } catch (error) {
+    logger.error("Error in scheduled setSports:", error);
+  }
+});
+
