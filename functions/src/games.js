@@ -735,6 +735,9 @@ export async function parseRoster(leagueNum, usesGamesheet, browser) {
         if (isHockey) {
             standings = await parseGameSheetHockeyRoster(seasonCode, divisionId, applebyTeamCode, localBrowser);
         }
+
+        return standings;
+
     } finally {
         // 4) If we created the browser in this function, close it here
         if (createdBrowser && localBrowser) {
