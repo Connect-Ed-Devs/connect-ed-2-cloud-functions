@@ -84,7 +84,7 @@ async function testRosterUpload() {
         return;
         }
 
-        const sampleLeagueCode = "2860Y8NS5"; // Get league code from first sport
+        const sampleLeagueCode = "2860Y8N5D"; // Get league code from first sport
         const usesGamesheet = Sports.getSportByLeagueCode(sampleLeagueCode)[3]; // Get gamesheet status from first sport
 
         if (!usesGamesheet) {
