@@ -541,3 +541,137 @@ export async function parseGameSheetGames(seasonCode, gameIds, browser) {
         }
     }
 }
+
+export async function parseGameSheetSoccerRoster(seasonCode, gameIds, teamCode, browser) {
+    let page;
+    try {
+        // Open a new page using the provided browser
+        page = await browser.newPage();
+        await page.setUserAgent(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+        );
+
+        const url = `https://gamesheetstats.com/seasons/${seasonCode}/teams/${teamCode}/roster`;
+        console.log("Visiting:", url);
+        await page.goto(url, {waitUntil: "networkidle2"});
+
+        // Wait for the table element to appear
+        await page.waitForSelector('.sc-VILhF.jDQCGM.gs-table', {timeout: 30000});
+
+        const roster = await page.evaluate(() => {
+            const roster = [];
+            const rows = document.querySelectorAll(".column.number .row-header");
+            console.log(rows);
+            rows.forEach((_, idx) => {
+                const getValue = (cls) => {
+                    const el = document.querySelector(`.column.${cls} .row-header.row-${idx} .data`);
+                    return el ? el.innerText.trim() : null;
+                };
+
+                let name = null, link = null;
+                const a = document.querySelector(`.column.name .row-header.row-${idx} .data a`);
+                if (a) { name = a.innerText.trim(); link = a.href; }
+
+                roster.push({
+                    number: getValue("number"),
+                    position: getValue("position"),
+                    name,
+                    link
+                });
+            });
+            return roster;
+        });
+
+        console.log("Found roster entries:", roster);
+/*
+        // now, for example, visit each player’s page and scrape something
+        for (let player of roster) {
+            const playerPage = await browser.newPage();
+            const playerUrl = new URL(player.href, baseUrl).href;
+            console.log("Visiting player:", player.name, playerUrl);
+            await playerPage.goto(playerUrl, { waitUntil: "networkidle2" });
+            // … do whatever you need on each playerPage …
+            await playerPage.close();
+        }
+*/
+        return roster;
+    } catch (err) {
+        console.error("Error in parseGameSheetRoster:", err);
+        return [];
+    } finally {
+        if (page) await page.close();
+    }
+}
+
+export async function parseGameSheetHockeyRoster(seasonCode, gameIds, teamCode, browser) {
+    let page;
+    try {
+        // Open a new page using the provided browser
+        page = await browser.newPage();
+        await page.setUserAgent(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+        );
+
+        const url = `https://gamesheetstats.com/seasons/${seasonCode}/teams/${teamCode}/roster`;
+        console.log("Visiting:", url);
+        await page.goto(url, {waitUntil: "networkidle2"});
+
+        // Wait for the table element to appear
+        await page.waitForSelector('.sc-VILhF.jDQCGM.gs-table', {timeout: 30000});
+
+        const roster = await page.evaluate(() => {
+            const out = [];
+
+            // 1st gs-table = skaters, 2nd gs-table = goalies
+            const tables = document.querySelectorAll('.sc-VILhF.jDQCGM.gs-table');
+
+            tables.forEach((table, tableIndex) => {
+                const rows = table.querySelectorAll('.column.number .row-header');
+
+                rows.forEach((_, idx) => {
+                    // scoped helper, looks only inside this table
+                    const getValue = cls => {
+                        const el = table.querySelector(`.column.${cls} .row-${idx} .data`);
+                        return el ? el.innerText.trim() : null;
+                    };
+
+                    const a = table.querySelector(`.column.name .row-${idx} .data a`);
+                    const name = a?.innerText.trim() ?? null;
+                    const link = a?.href            ?? null;
+
+                    out.push({
+                        number:   getValue('number'),
+                        // if we're in the 2nd table (goalies), force "GK"
+                        position: tableIndex === 1
+                            ? 'GK'
+                            : getValue('position'),
+                        name,
+                        link
+                    });
+                });
+            });
+
+            return out.filter(r => r.name);
+        });
+
+        console.log("Found roster entries:", roster);
+        /*
+                // now, for example, visit each player’s page and scrape something
+                for (let player of roster) {
+                    const playerPage = await browser.newPage();
+                    const playerUrl = new URL(player.href, baseUrl).href;
+                    console.log("Visiting player:", player.name, playerUrl);
+                    await playerPage.goto(playerUrl, { waitUntil: "networkidle2" });
+                    // … do whatever you need on each playerPage …
+                    await playerPage.close();
+                }
+        */
+        return roster;
+    } catch (err) {
+        console.error("Error in parseGameSheetRoster:", err);
+        return [];
+    } finally {
+        if (page) await page.close();
+    }
+}
+

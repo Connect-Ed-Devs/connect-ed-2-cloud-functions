@@ -10,7 +10,9 @@ import {
     parseGameSheetHockeyStandings,
     parseGameSheetSoccerStandings,
     parseGameIDs,
-    parseGameSheetGames
+    parseGameSheetGames,
+    parseGameSheetSoccerRoster,
+    parseGameSheetHockeyRoster,
 } from "./gamesheet.js";
 import {getStandings, getApplebyTeamCode} from "./database.js";
 
@@ -646,6 +648,93 @@ export async function parseGames(leagueNum, usesGamesheet, browser) {
         }
 
         return []
+    } finally {
+        // 4) If we created the browser in this function, close it here
+        if (createdBrowser && localBrowser) {
+            await localBrowser.close();
+        }
+    }
+}
+
+/**
+ * parseRoster: Scrapes roster data for a specific sport and returns an array of Roster objects.
+ */
+export async function parseRoster(leagueNum, usesGamesheet, browser) {
+    // Get sport from leagueNum
+    const sport = Sports.getSportByLeagueCode(leagueNum);
+    if (!sport) {
+        console.error(`Sport not found for league number: ${leagueNum}`);
+        return [];
+    }
+
+    // 1) If it’s a GameSheet league, get the season code and division ID from the iframe URL
+    const response = await axios.request({
+        baseURL: "http://www.cisaa.ca/cisaa/ShowPage.dcisaa?CISAA_Results",
+        method: "PUT",
+        headers: {"content-type": "application/x-www-form-urlencoded"},
+        data: qs.stringify({txtleague: leagueNum}),
+    });
+
+    const html = response.data;
+    const $ = cheerio.load(html);
+
+    const iframeSrc = $('iframe[src*="gamesheetstats.com/seasons/"]').attr("src");
+    if (!iframeSrc) {
+        console.error("No iframe found for league:", leagueNum);
+        return [];
+    }
+
+    // Extract the season code and division ID from the iframe URL
+    const seasonCodeMatch = iframeSrc.match(/seasons\/(\d{4})/);
+    const divisionMatch = iframeSrc.match(/filter\[division\]=(\d{5})/);
+    if (!seasonCodeMatch || !divisionMatch) {
+        console.error("Season code or division ID not found in the iframe URL");
+        return [];
+    }
+
+    const seasonCode = seasonCodeMatch[1];
+    const divisionId = divisionMatch[1];
+
+    // If it's a gamesheet league, get the team code from firebase standings and determine by name "Appleby College"
+    const applebyTeamCode = await getApplebyTeamCode(leagueNum);
+
+    // 2) If it’s a GameSheet league, check if a browser was provided
+    let localBrowser = browser;
+    let createdBrowser = false;
+
+    if (!localBrowser) {
+        // No browser was passed => open a new one
+        localBrowser = await puppeteer.launch({
+            headless: true,
+            timeout: 0,
+            args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        });
+        createdBrowser = true;
+    }
+
+    try {
+
+        // Check whether the sport is soccer or hockey
+        const sportRecord = Sports.getSportByLeagueCode(leagueNum);
+        const sportName = sportRecord[0];
+        const isSoccer = sportName.toLowerCase().includes("soccer");
+        const isHockey = sportName.toLowerCase().includes("hockey");
+        if (!isSoccer && !isHockey) {
+            console.error(`Unsupported sport for GameSheet: ${sportName}`);
+            return [];
+        }
+
+        let standings = [];
+
+        // If it’s soccer, use the soccer-specific scraping function
+        if (isSoccer) {
+            standings = await parseGameSheetSoccerRoster(seasonCode, divisionId, applebyTeamCode, localBrowser);
+        }
+
+        // If it’s hockey, use the hockey-specific scraping function
+        if (isHockey) {
+            standings = await parseGameSheetHockeyRoster(seasonCode, divisionId, applebyTeamCode, localBrowser);
+        }
     } finally {
         // 4) If we created the browser in this function, close it here
         if (createdBrowser && localBrowser) {

@@ -1,10 +1,11 @@
 import puppeteer from "puppeteer";
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { parseSports, parseStandings, parseGames } from "./games.js";
+import { parseSports, parseStandings, parseGames, parseRoster } from "./games.js";
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import * as fs from 'fs';
+
 
 // Get directory name for ES module
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -113,6 +114,33 @@ export async function setGames(leagueCode, usesGamesheet, browser) {
     } catch (error) {
         console.error("Error in setGames:", error);
         throw error; // Propagate error to be caught in testGamesUpload
+    }
+}
+
+/**
+ * setRoster:
+ * Scrapes roster data and writes/updates each document in the "Roster" collection.
+ */
+export async function setRoster(leagueCode, usesGamesheet, browser) {
+    try {
+        const roster = await parseRoster(leagueCode, usesGamesheet, browser);
+        const batch = db.batch();
+
+        roster.forEach((rosterItem) => {
+            // Convert instance to plain object using toMap() if available
+            const data = typeof rosterItem.toMap === 'function'
+                ? rosterItem.toMap()
+                : Object.assign({}, rosterItem);
+            const docRef = db.collection("Sports")
+                .doc(leagueCode)
+                .collection("Roster")
+                .doc(rosterItem.rosterCode);
+            batch.set(docRef, data, { merge: true });
+        });
+        await batch.commit();
+    } catch (error) {
+        console.error("Error in setRoster:", error);
+        throw error; // Propagate error to be caught in testRosterUpload
     }
 }
 

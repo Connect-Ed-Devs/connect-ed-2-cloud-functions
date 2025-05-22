@@ -2,9 +2,11 @@ import {
   setSports,
   setStandings,
   setGames,
+    setRoster,
+  setAll,
   getSports,
   updateGamesStandings,
-  initializeFirebase
+  initializeFirebase, getStandings
 } from './database.js';
 import { Sports } from './models/sports.js';
 
@@ -39,10 +41,11 @@ async function testStandingsUpload() {
       return;
     }
 
-    const sampleLeagueCode = allSports[0][2]; // Get league code from first sport
+    const sampleLeagueCode = "2860Y8N2D"; // Get league code from first sport
+    const usesGamesheet = false; // Get gamesheet status from first sport
     console.log(`Using league code: ${sampleLeagueCode}`);
 
-    await setStandings(sampleLeagueCode);
+    await setStandings(sampleLeagueCode, usesGamesheet);
     console.log(`Standings for league ${sampleLeagueCode} uploaded successfully`);
   } catch (error) {
     console.error("Error uploading standings data:", error);
@@ -59,14 +62,43 @@ async function testGamesUpload() {
       return;
     }
 
-    const sampleLeagueCode = allSports[0][2]; // Get league code from first sport
+    const sampleLeagueCode = "2860Y8OA1"; // Get league code from first sport
+    const usesGamesheet = Sports.getSportByLeagueCode(sampleLeagueCode)[3]; // Get gamesheet status from first sport
+
     console.log(`Using league code: ${sampleLeagueCode}`);
 
-    await setGames(sampleLeagueCode);
+    await setGames(sampleLeagueCode, usesGamesheet);
     console.log(`Games for league ${sampleLeagueCode} uploaded successfully`);
   } catch (error) {
     console.error("Error uploading games data:", error);
   }
+}
+
+async function testRosterUpload() {
+    console.log("Testing roster upload for a sample league...");
+    try {
+        // Get a sample league code from Sports model
+        const allSports = Sports.getAllSports();
+        if (allSports.length === 0) {
+        console.log("No sports data available for testing");
+        return;
+        }
+
+        const sampleLeagueCode = "2860Y8NS5"; // Get league code from first sport
+        const usesGamesheet = Sports.getSportByLeagueCode(sampleLeagueCode)[3]; // Get gamesheet status from first sport
+
+        if (!usesGamesheet) {
+            console.log("Gamesheet is not used for this league, skipping roster upload.");
+            return;
+        }
+
+        console.log(`Using league code: ${sampleLeagueCode}`);
+
+        await setRoster(sampleLeagueCode, usesGamesheet);
+        console.log(`Roster for league ${sampleLeagueCode} uploaded successfully`);
+    } catch (error) {
+        console.error("Error uploading roster data:", error);
+    }
 }
 
 async function testFullUpdate() {
@@ -79,9 +111,20 @@ async function testFullUpdate() {
   }
 }
 
+async function testSetAll() {
+    console.log("Testing setAll function...");
+    try {
+        await setAll();
+        console.log("All data uploaded successfully");
+    } catch (error) {
+        console.error("Error in setAll function:", error);
+    }
+}
+
 // Run all tests in sequence
 async function runAllTests() {
   console.log("Starting Firebase functionality tests...");
+
 
   //await testSportsUpload();
   //console.log("\n-----------------------------------\n");
@@ -89,11 +132,19 @@ async function runAllTests() {
   //await testStandingsUpload();
   //console.log("\n-----------------------------------\n");
 
-  await testGamesUpload();
-  console.log("\n-----------------------------------\n");
+    await testRosterUpload()
+    console.log("\n-----------------------------------\n");
+    /*
+     await testGamesUpload();
+     console.log("\n-----------------------------------\n");
 
-  await testFullUpdate();
-  console.log("\n-----------------------------------\n");
+     await testFullUpdate();
+     console.log("\n-----------------------------------\n");
+
+
+     await testSetAll();
+     console.log("\n-----------------------------------\n");
+     */
 
   console.log("All Firebase tests completed");
 }
