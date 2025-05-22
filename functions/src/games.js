@@ -5,16 +5,16 @@ import {Schools} from "./models/schools.js";
 import {Sports} from "./models/sports.js";
 import {BaseGame} from "./models/GameClasses.js";
 import puppeteer from "puppeteer";
-import { BaseStandings } from "./models/StandingsClasses.js";
+import {BaseStandings} from "./models/StandingsClasses.js";
 import {
-    parseGameSheetHockeyStandings,
-    parseGameSheetSoccerStandings,
     parseGameIDs,
     parseGameSheetGames,
-    parseGameSheetSoccerRoster,
     parseGameSheetHockeyRoster,
+    parseGameSheetHockeyStandings,
+    parseGameSheetSoccerRoster,
+    parseGameSheetSoccerStandings,
 } from "./gamesheet.js";
-import {getStandings, getApplebyTeamCode} from "./database.js";
+import {getApplebyTeamCode} from "./database.js";
 
 /**
  * Helper functions to replace SQL lookups.
@@ -110,9 +110,8 @@ export async function inSport(leagueNum, usesGamesheet, browser)    {
                     await page.close(); // done with this page
 
                     // Check if "Appleby College" is present
-                    const applebyExists = teamTitles.includes("Appleby College");
+                    return teamTitles.includes("Appleby College");
 
-                    return applebyExists;
                 } catch (error) {
                     console.error(`Attempt ${retries + 1} failed for league ${leagueNum}:`, error);
                     retries++;
