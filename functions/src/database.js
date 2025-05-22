@@ -6,7 +6,9 @@ import { Sports } from './models/sports.js';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import * as fs from 'fs';
-
+import { Article } from './models/Article.js';
+import { Event } from './models/Event.js';
+import { LunchMenu, LunchMenuItem, LunchMenuStation } from './models/LunchMenu.js';
 
 // Get directory name for ES module
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -342,6 +344,182 @@ export async function getRoster(leagueNum) {
         console.error("Error getting roster:", error);
         return [];
     }
+}
+
+// --- LunchMenu Functions ---
+
+/**
+ * setLunchMenu:
+ * Writes or updates a lunch menu document in the "LunchMenus" collection.
+ * The document ID will be the formatted date (YYYY-MM-DD).
+ * @param {LunchMenu | object} menuData - An instance of LunchMenu or a plain object.
+ */
+export async function setLunchMenu(menuData) {
+    if (!firebaseInitialized) initializeFirebase();
+    const menu = (menuData instanceof LunchMenu) ? menuData : new LunchMenu(menuData);
+    const docId = menu.getFormattedDate();
+    const docRef = db.collection("LunchMenus").doc(docId);
+    await docRef.set(menu.toMap(), { merge: true });
+    console.log(`Lunch menu for ${docId} successfully set/updated.`);
+}
+
+/**
+ * getLunchMenuByDate:
+ * Retrieves a specific lunch menu by its date.
+ * @param {Date | string} date - A Date object or a date string (YYYY-MM-DD).
+ * @returns {object | null} The lunch menu data or null if not found.
+ */
+export async function getLunchMenuByDate(date) {
+    if (!firebaseInitialized) initializeFirebase();
+    let docId;
+    if (date instanceof Date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        docId = `${year}-${month}-${day}`;
+    } else if (typeof date === 'string' && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        docId = date;
+    } else {
+        console.error("Invalid date format for getLunchMenuByDate. Use Date object or 'YYYY-MM-DD' string.");
+        return null;
+    }
+    const docRef = db.collection("LunchMenus").doc(docId);
+    const docSnap = await docRef.get();
+    if (docSnap.exists()) {
+        return docSnap.data();
+    } else {
+        console.log(`No lunch menu found for date: ${docId}`);
+        return null;
+    }
+}
+
+/**
+ * getAllLunchMenus:
+ * Retrieves all lunch menus from the "LunchMenus" collection.
+ * @returns {Array<object>} An array of lunch menu objects.
+ */
+export async function getAllLunchMenus() {
+    if (!firebaseInitialized) initializeFirebase();
+    const snapshot = await db.collection('LunchMenus').orderBy('date', 'desc').get();
+    const menus = [];
+    snapshot.forEach(doc => menus.push(doc.data()));
+    return menus;
+}
+
+// --- Article Functions ---
+
+/**
+ * setArticle:
+ * Writes or updates an article document in the "Articles" collection.
+ * Uses article.articleId as document ID if provided and valid, otherwise Firestore auto-generates ID.
+ * @param {Article | object} articleData - An instance of Article or a plain object.
+ * @returns {string} The document ID of the set/updated article.
+ */
+export async function setArticle(articleData) {
+    if (!firebaseInitialized) initializeFirebase();
+    const article = (articleData instanceof Article) ? articleData : new Article(articleData);
+    let docRef;
+    if (article.articleId && typeof article.articleId === 'string' && article.articleId.trim() !== '') {
+        docRef = db.collection("Articles").doc(article.articleId.trim());
+    } else {
+        docRef = db.collection("Articles").doc(); // Firestore auto-generates ID
+    }
+    await docRef.set(article.toMap(), { merge: true });
+    console.log(`Article with ID ${docRef.id} successfully set/updated.`);
+    return docRef.id;
+}
+
+/**
+ * getArticleById:
+ * Retrieves a specific article by its document ID.
+ * @param {string} articleId - The document ID of the article.
+ * @returns {object | null} The article data or null if not found.
+ */
+export async function getArticleById(articleId) {
+    if (!firebaseInitialized) initializeFirebase();
+    if (!articleId || typeof articleId !== 'string' || articleId.trim() === '') {
+        console.error("Invalid articleId provided to getArticleById.");
+        return null;
+    }
+    const docRef = db.collection("Articles").doc(articleId.trim());
+    const docSnap = await docRef.get();
+    if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
+    } else {
+        console.log(`No article found with ID: ${articleId}`);
+        return null;
+    }
+}
+
+/**
+ * getAllArticles:
+ * Retrieves all articles from the "Articles" collection, ordered by publication date descending.
+ * @returns {Array<object>} An array of article objects, each including its ID.
+ */
+export async function getAllArticles() {
+    if (!firebaseInitialized) initializeFirebase();
+    const snapshot = await db.collection('Articles').orderBy('publication_date', 'desc').get();
+    const articles = [];
+    snapshot.forEach(doc => articles.push({ id: doc.id, ...doc.data() }));
+    return articles;
+}
+
+// --- Event Functions ---
+
+/**
+ * setEvent:
+ * Writes or updates an event document in the "Events" collection.
+ * Uses event.eventId as document ID if provided and valid, otherwise Firestore auto-generates ID.
+ * @param {Event | object} eventData - An instance of Event or a plain object.
+ * @returns {string} The document ID of the set/updated event.
+ */
+export async function setEvent(eventData) {
+    if (!firebaseInitialized) initializeFirebase();
+    const event = (eventData instanceof Event) ? eventData : new Event(eventData);
+    let docRef;
+    if (event.eventId && typeof event.eventId === 'string' && event.eventId.trim() !== '') {
+        docRef = db.collection("Events").doc(event.eventId.trim());
+    } else {
+        docRef = db.collection("Events").doc(); // Firestore auto-generates ID
+    }
+    await docRef.set(event.toMap(), { merge: true });
+    console.log(`Event with ID ${docRef.id} successfully set/updated.`);
+    return docRef.id;
+}
+
+/**
+ * getEventById:
+ * Retrieves a specific event by its document ID.
+ * @param {string} eventId - The document ID of the event.
+ * @returns {object | null} The event data or null if not found.
+ */
+export async function getEventById(eventId) {
+    if (!firebaseInitialized) initializeFirebase();
+    if (!eventId || typeof eventId !== 'string' || eventId.trim() === '') {
+        console.error("Invalid eventId provided to getEventById.");
+        return null;
+    }
+    const docRef = db.collection("Events").doc(eventId.trim());
+    const docSnap = await docRef.get();
+    if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
+    } else {
+        console.log(`No event found with ID: ${eventId}`);
+        return null;
+    }
+}
+
+/**
+ * getAllEvents:
+ * Retrieves all events from the "Events" collection, ordered by start date ascending.
+ * @returns {Array<object>} An array of event objects, each including its ID.
+ */
+export async function getAllEvents() {
+    if (!firebaseInitialized) initializeFirebase();
+    const snapshot = await db.collection('Events').orderBy('start_date', 'asc').get();
+    const events = [];
+    snapshot.forEach(doc => events.push({ id: doc.id, ...doc.data() }));
+    return events;
 }
 
 /**
