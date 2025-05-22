@@ -17,28 +17,34 @@ let db;
 
 // Create a function to initialize Firebase only once
 export function initializeFirebase() {
-    if (!firebaseInitialized) {
-        try {
-            // Path to service account file (one level up from src)
-            const serviceAccountPath = path.resolve(__dirname, 'C:/Users/2025124/OneDrive - Appleby College/Documents/connect-ed-dfbbd-firebase-adminsdk-fbsvc-4625a29707.json');
+    if (firebaseInitialized) {
+        return;
+    }
 
-            if (fs.existsSync(serviceAccountPath)) {
-                const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-                initializeApp({
-                    credential: cert(serviceAccount)
-                });
-                console.log("Firebase initialized with service account");
-            } else {
-                console.error("Service account file not found at:", serviceAccountPath);
-                throw new Error("Firebase service account file not found");
-            }
+    // Path to service account file (one level up from src)
+    const serviceAccountPath = path.resolve(__dirname, 'C:/Users/2025124/OneDrive - Appleby College/Documents/connect-ed-dfbbd-firebase-adminsdk-fbsvc-4625a29707.json');
 
-            db = getFirestore();
-            firebaseInitialized = true;
-        } catch (error) {
-            console.error("Error initializing Firebase:", error);
-            throw error;
-        }
+    if (!fs.existsSync(serviceAccountPath)) {
+        const errorMessage = `Service account file not found at: ${serviceAccountPath}. Firebase initialization cannot proceed.`;
+        console.error(errorMessage);
+        throw new Error(errorMessage);
+    }
+
+    try {
+        const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+        initializeApp({
+            credential: cert(serviceAccount)
+        });
+        console.log("Firebase initialized with service account");
+
+        db = getFirestore();
+        firebaseInitialized = true;
+    } catch (error) {
+        console.error("Error during Firebase SDK initialization (after file check):", error);
+        // Ensure firebaseInitialized is false if an error occurs during initialization
+        firebaseInitialized = false;
+        db = undefined;
+        throw error; // Re-throw the error to be handled by the caller
     }
 }
 
