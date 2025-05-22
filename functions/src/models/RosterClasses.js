@@ -86,7 +86,7 @@ export class soccerPlayer extends BaseRoster {
     }
 }
 
-export class soccerGK extends soccerPlayer {
+export class soccerGK extends BaseRoster {
     constructor({
         teamName,
         playerId,
@@ -158,13 +158,8 @@ export class hockeyPlayer extends BaseRoster {
                     assists,
 
                     // Additional fields specific to hockeyPlayer
-                    plusMinus = '',
+                    points = '',
                     penaltyMinutes = '',
-                    shots = '',
-                    shootingPercentage = '',
-                    timeOnIce = '',
-                    faceoffWins = '',
-                    faceoffLosses = '',
                     link = ''
 
                 }) {
@@ -182,13 +177,8 @@ export class hockeyPlayer extends BaseRoster {
         });
 
         // Additional fields specific to hockeyPlayer are added
-        this.plusMinus = plusMinus;
+        this.points = points;
         this.penaltyMinutes = penaltyMinutes;
-        this.shots = shots;
-        this.shootingPercentage = shootingPercentage;
-        this.timeOnIce = timeOnIce;
-        this.faceoffWins = faceoffWins;
-        this.faceoffLosses = faceoffLosses;
         this.link = link;
 
     }
@@ -197,19 +187,14 @@ export class hockeyPlayer extends BaseRoster {
         const baseMap = super.toMap();
         return {
             ...baseMap,
-            plus_minus: this.plusMinus,
+            points: this.points,
             penalty_minutes: this.penaltyMinutes,
-            shots: this.shots,
-            shooting_percentage: this.shootingPercentage,
-            time_on_ice: this.timeOnIce,
-            faceoff_wins: this.faceoffWins,
-            faceoff_losses: this.faceoffLosses,
             link: this.link
         };
     }
 }
 
-export class hockeyGoalie extends hockeyPlayer {
+export class hockeyGK extends BaseRoster {
     constructor({
                     teamName,
                     playerId,
@@ -228,6 +213,7 @@ export class hockeyGoalie extends hockeyPlayer {
                     goalsAgainstAverage = '',
                     shutouts = '',
                     minutesPlayed = ''
+
                 }) {
         // Pass base fields to parent constructor
         super({
@@ -240,7 +226,6 @@ export class hockeyGoalie extends hockeyPlayer {
             gamesPlayed,
             goals,
             assists,
-            link
         });
 
         // Additional fields specific to hockeyGoalie are added
@@ -249,6 +234,7 @@ export class hockeyGoalie extends hockeyPlayer {
         this.goalsAgainstAverage = goalsAgainstAverage;
         this.shutouts = shutouts;
         this.minutesPlayed = minutesPlayed;
+        this.link = link;
 
     }
 
@@ -260,7 +246,8 @@ export class hockeyGoalie extends hockeyPlayer {
             goals_against: this.goalsAgainst,
             goals_against_average: this.goalsAgainstAverage,
             shutouts: this.shutouts,
-            minutes_played: this.minutesPlayed
+            minutes_played: this.minutesPlayed,
+            link: this.link
         };
     }
 }
