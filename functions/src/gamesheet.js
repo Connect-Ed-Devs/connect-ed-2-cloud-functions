@@ -1,8 +1,7 @@
-import puppeteer from "puppeteer";
-import { SoccerStandings, HockeyStandings } from "./models/StandingsClasses.js";
+import {HockeyStandings, SoccerStandings} from "./models/StandingsClasses.js";
 import {gamesheetGame} from "./models/GameClasses.js";
 import {Goal} from "./models/goal.js";
-import {hockeyPlayer, hockeyGK, soccerPlayer, soccerGK} from "./models/rosterClasses.js";
+import {hockeyGK, hockeyPlayer, soccerGK, soccerPlayer} from "./models/rosterClasses.js";
 
 export async function parseGameSheetSoccerStandings(seasonCode, divisionId, browser) {
     let page;
@@ -90,7 +89,7 @@ export async function parseGameSheetSoccerStandings(seasonCode, divisionId, brow
 
         // Map raw data into SoccerStandings objects.
         // (Update sportId, schoolId, and standingsCode as needed.)
-        const soccerStandings = rawStandings.map(obj => new SoccerStandings({
+        return rawStandings.map(obj => new SoccerStandings({
             teamName: obj.teamName,
             gamesPlayed: obj.gamesPlayed,
             wins: obj.wins,
@@ -109,8 +108,6 @@ export async function parseGameSheetSoccerStandings(seasonCode, divisionId, brow
             redCards: obj.redCards,
             gamesheetTeamId: obj.gamesheetTeamId,
         }));
-
-        return soccerStandings;
     } catch (error) {
         console.error("Error in parseGameSheetSoccerStandings:", error);
         return [];
@@ -218,7 +215,7 @@ export async function parseGameSheetHockeyStandings(seasonCode, divisionId, brow
 
         // Map the raw data into HockeyStandings objects.
         // (Here sportId, schoolId, and standingsCode are left as null for now—you can set them as needed.)
-        const hockeyStandings = rawStandings.map(obj => new HockeyStandings({
+        return rawStandings.map(obj => new HockeyStandings({
             teamName: obj.teamName,
             gamesPlayed: obj.gamesPlayed,
             wins: obj.wins,
@@ -241,8 +238,6 @@ export async function parseGameSheetHockeyStandings(seasonCode, divisionId, brow
             shortHandedGoals: obj.shortHandedGoals,
             gamesheetTeamId: obj.gamesheetTeamId,
         }));
-
-        return hockeyStandings;
     } catch (error) {
         console.error("Error in parseGameSheetHockeyStandings:", error);
         return [];
@@ -388,17 +383,6 @@ export async function parseGameSheetGames(seasonCode, gameIds, browser) {
                     await page.waitForSelector('[data-testid^="goal-event-"]', {timeout: 30000});
 
 
-                    const test = await page.evaluate(() => {            // Extract and print entire innerHTML of each period container
-                        const periodContainers = Array.from(document.querySelectorAll('[data-testid^="goal-by-period-"]'));
-                        if (periodContainers.length) {
-                            periodContainers.forEach((container, index) => {
-                                console.log(`Period Container ${index}:`, container.innerHTML);
-                            });
-                        } else {
-                            console.log("No period containers found.");
-                        }
-                    });
-
                     //Extract goals
                     const goalsData = await page.evaluate(() => {
                         const gameStatus = document.querySelector('[data-testid="boxscore-game-status-bar"]')?.textContent.toLowerCase() || '';
@@ -462,7 +446,7 @@ export async function parseGameSheetGames(seasonCode, gameIds, browser) {
                                 // Extract the assist information (if any).
                                 const assistEl = goalNode.querySelector('[data-testid^="goal-data-assists-"]');
                                 let assistText = assistEl ? assistEl.innerText.trim() : '';
-                                let assister = '';
+                                let assister;
                                 let preAssister = '';
 
                                 // If there is more than one "#" in the assistText then split assists
