@@ -2,3 +2,4 @@ node_modules/
 *.local
 functions/secrets/service-account.json
 .cache/
+.idea/
