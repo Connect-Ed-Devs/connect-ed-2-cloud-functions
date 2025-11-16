@@ -1,4 +1,4 @@
-# Connect-ED Cloud Functions
+# Connect-Ed Cloud Functions
 
 ## Overview
 
